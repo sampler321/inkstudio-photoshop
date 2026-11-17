@@ -262,7 +262,9 @@ function packRow(p) {
   const row = el('div', 'pack' + (open.has(p.id) ? ' open' : ''));
   const head = el('div', 'head');
   const thumb = el('img', 'cover');
+  const firstTip = (p.files.find((f) => f.tips && f.tips.length) || {}).tips;
   if (p.covers && p.covers[0]) lazyImg(thumb, LIB.root + '/.inkstudio/' + p.covers[0]);
+  else if (firstTip) { lazyImg(thumb, LIB.root + '/.inkstudio/' + firstTip[0]); thumb.classList.add('tipCover'); }   // no Envato cover: the first brush
   const meta = el('div', 'meta');
   meta.appendChild(el('div', 'title', p.name));
   meta.title = p.title;
@@ -414,6 +416,10 @@ function setTab() { document.querySelectorAll('#tabs .b').forEach((x) => x.class
 function initLibrary() {
   document.querySelectorAll('#tabs .b').forEach((b) => b.onclick = () => { tab = b.dataset.tab; setTab(); render(); });
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value.trim(); render(); }, 150); });
+  // view size, like Premiere's media zoom: 0 list, 1 two covers per row, 2 one large cover per row (brush tiles grow too)
+  const applyZoom = (z) => { const l = $('#list'); ['z0', 'z1', 'z2'].forEach((c) => l.classList.remove(c)); l.classList.add('z' + z); };
+  const zoom = $('#zoom'); zoom.value = store.get('zoom', 0); applyZoom(zoom.value);
+  zoom.addEventListener('input', () => { applyZoom(zoom.value); store.set('zoom', +zoom.value); });
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
   // <plugin data>/library.txt (if present) names the brush folder; otherwise the last folder picked

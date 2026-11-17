@@ -90,3 +90,23 @@ html, body { height: 100%; overflow: hidden; }
 .sline { display: flex; align-items: center; justify-content: space-between; }
 .sline .name { font-size: 10px; }
 .stroke.tipOnly { object-fit: contain; padding: 4px 0; }
+
+/* view size (footer slider) */
+.zoom { display: flex; align-items: center; }
+.zoom input { width: 70px; margin: 0 4px; }
+.zi { color: var(--mut); font-size: 10px; }
+.list.z1, .list.z2 { display: flex; flex-wrap: wrap; align-content: flex-start; }
+.list.z1 .pack { width: 48%; margin: 0 2% 8px 0; }
+.list.z2 .pack { width: 100%; margin: 0 0 10px 0; }
+.list.z1 .pack.open, .list.z2 .pack.open { width: 100%; margin-right: 0; }
+.list.z1 .head, .list.z2 .head { flex-direction: column; align-items: stretch; position: relative; padding: 4px; }
+.list.z1 .cover { width: 100%; height: 90px; margin: 0 0 6px 0; }
+.list.z2 .cover { width: 100%; height: 180px; margin: 0 0 6px 0; }
+.list.z1 .pack.open .cover { height: 140px; }
+.list.z1 .head .star, .list.z2 .head .star { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.45); border-radius: 10px; }
+.list.z1 .title, .list.z2 .title { white-space: normal; }
+/* brush tiles scale with the view */
+.list.z1 .cell { width: 96px; } .list.z1 .tip { width: 90px; height: 90px; }
+.list.z2 .cell { width: 140px; } .list.z2 .tip { width: 134px; height: 134px; }
+.list.z1 .stroke { height: 60px; } .list.z2 .stroke { height: 84px; }
+.cover.tipCover { object-fit: contain; background: #f4f1ea; }
