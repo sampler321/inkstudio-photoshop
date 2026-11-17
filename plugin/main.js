@@ -517,7 +517,7 @@ function initRail() {
       const cur = await nativeOptions();
       const patch = { usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity };
       if (!prs.size && '$szVr' in cur) patch.$szVr = OFF;
-      if (!prs.opacity) ['$opVr', '$prVr', 'textureDepthDynamics'].forEach((k) => { if (k in cur) patch[k] = OFF; });   // opacity, flow, grain depth (reads as opacity)
+      if (!prs.opacity) ['$opVr', '$prVr'].forEach((k) => { if (k in cur) patch[k] = OFF; });   // opacity and flow; grain depth by pressure stays (Borys: grain dynamics look better)
       await ps_.toolOpts(patch, 'Pressure');
     } catch (e) { log('pressure', e); }
   };
