@@ -3,6 +3,9 @@
 // Writes OUT_DIR/<index>.png (480x120) and returns "done <n> ok, <m> failed: names".
 function s(x) { return stringIDToTypeID(x); }
 function c(x) { return charIDToTypeID(x); }
+function presetCount() { var r = new ActionReference(); r.putProperty(s('property'), s('presetManager')); r.putEnumerated(s('application'), s('ordinal'), s('targetEnum')); return executeActionGet(r).getList(s('presetManager')).getObjectValue(0).getList(s('name')).count; }
+var BEFORE = -1;
+if (typeof LOAD_PATH != 'undefined') { BEFORE = presetCount(); app.load(new File(LOAD_PATH)); }
 var ru = app.preferences.rulerUnits; app.preferences.rulerUnits = Units.PIXELS;
 var keepDoc = app.documents.length ? app.activeDocument : null;
 var keepFg = app.foregroundColor;
@@ -49,6 +52,8 @@ for (var b = 0; b < BRUSHES.length; b++) {
   } catch (e) { failed.push(BRUSHES[b]); try { for (var j = doc.pathItems.length - 1; j >= 0; j--) doc.pathItems[j].remove(); } catch (x) {} }
 }
 doc.close(SaveOptions.DONOTSAVECHANGES);
+// leave the Brushes panel as it was: remove the presets this run appended
+if (BEFORE >= 0) { var n = presetCount(); for (var k = n; k > BEFORE; k--) { try { var rr = new ActionReference(); rr.putIndex(s('brush'), k); var dd = new ActionDescriptor(); dd.putReference(c('null'), rr); executeAction(s('delete'), dd, DialogModes.NO); } catch (e) { break; } } }
 if (keepDoc) app.activeDocument = keepDoc;
 app.foregroundColor = keepFg; app.preferences.rulerUnits = ru;
 'done ' + ok + ' ok, ' + failed.length + ' failed: ' + failed.slice(0, 10).join(' | ');
