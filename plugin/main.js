@@ -163,6 +163,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
+let inspT = null;
 let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
 const showAll = new Set();
@@ -418,11 +419,91 @@ async function useBrush(p, f, b, cell) {
     document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
     status(`${b}, ${px} px`);
+    renderInspector();
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
     store.set('recent', recent);
   } catch (e) { status('Could not select: ' + (e.message || e)); log('useBrush', b, e); throw e; }
 }
 function setTab() { document.querySelectorAll('#tabs .b').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab)); }
+
+
+/* ---------- pen inspector: every way the current brush reacts to the pen, live from Photoshop, each switchable ---------- */
+const CONTROL = { 1: 'Fade', 2: 'Pressure', 3: 'Tilt', 4: 'Stylus wheel', 5: 'Rotation', 6: 'Initial direction', 7: 'Direction', 8: 'Pressure', 9: 'Stylus wheel' };
+const LINKS = [
+  ['$szVr', 'size'], ['$opVr', 'opacity'], ['$prVr', 'flow'], ['angleDynamics', 'angle'], ['roundnessDynamics', 'roundness'],
+  ['textureDepthDynamics', 'grain depth'], ['scatterDynamics', 'scatter'], ['countDynamics', 'dab count'], ['$clVr', 'colour'],
+  ['$wtVr', 'wetness'], ['$mxVr', 'mix'],
+];
+const TIP = { sampledBrush: 'image tip', computedBrush: 'round tip', dBrush: 'bristle tip', dTips: 'erodible / airbrush tip' };
+let inspOpen = store.get('inspOpen', false);
+function penProfile(o) {
+  const rows = [];   // {control, what, key, on}
+  LINKS.forEach(([k0, label]) => {
+    const k = [k0, '$' + k0, k0.replace(/^\$/, '')].find((x) => o[x] && typeof o[x] === 'object');
+    if (!k) return; const v = o[k];
+    if (v.$bVTy) rows.push({ control: CONTROL[v.$bVTy] || ('control ' + v.$bVTy), what: label, key: k, on: true, min: v.minimum && v.minimum._value });
+    const j = v.jitter && v.jitter._value; if (j > 0) rows.push({ control: 'Random', what: label + ' ' + Math.round(j) + '%', key: k, jitter: true, on: true });
+  });
+  const hidden = [];
+  const b = o.brush || {};
+  if (b._obj === 'dBrush') hidden.push('Bristle physics: pressure and tilt press the bristles down, so strokes get denser, wider and darker. No setting controls this; "Pen pressure: none" fixes it at one value.');
+  if (b._obj === 'dTips') hidden.push('Erodible / airbrush tip: wears down or sprays with pressure and tilt.');
+  if (o.useBrushPose) hidden.push('Brush pose is on: it can replace the pen\'s real tilt, rotation or pressure with fixed values.');
+  if (o.usePressureOverridesSize) hidden.push('Pressure for size override (top bar) is on.');
+  if (o.usePressureOverridesOpacity) hidden.push('Pressure for opacity override (top bar) is on.');
+  if (o.useTexture) hidden.push('Paper grain: ' + ((o.texture && o.texture.name) || 'texture') + ', ' + ((o.textureBlendMode && o.textureBlendMode._value) || '') + ', depth ' + ((o.textureDepth && Math.round(o.textureDepth._value)) || 0) + '%.');
+  if (o.dualBrush && o.dualBrush.useDualBrush) hidden.push('Dual brush: a second tip cuts into this one.');
+  if (o.useColorDynamics) hidden.push('Colour dynamics: hue, saturation or brightness vary while you paint.');
+  if (o.wetEdges) hidden.push('Wet edges: pigment pools at the stroke edge, the middle stays lighter.');
+  if (o.repeat) hidden.push('Build-up: paint keeps flowing while the pen rests.');
+  if (o.noise) hidden.push('Noise on soft edges.');
+  if (o.flow != null && o.flow < 100) hidden.push('Flow ' + o.flow + '%: strokes are see-through and build up where they overlap.');
+  if (o.opacity != null && o.opacity < 100) hidden.push('Opacity ' + o.opacity + '%.');
+  if (o.mode && o.mode._value && o.mode._value !== 'normal') hidden.push('Blend mode ' + o.mode._value + '.');
+  if (o.minimumDiameter && o.minimumDiameter._value > 0 && o.$szVr && o.$szVr.$bVTy) hidden.push('Never thinner than ' + Math.round(o.minimumDiameter._value) + '% of the size.');
+  if (o.tiltScale && o.tiltScale._value && o.angleDynamics && o.angleDynamics.$bVTy === 3) hidden.push('Tilt scale ' + Math.round(o.tiltScale._value) + '%.');
+  return { rows, hidden, tip: TIP[b._obj] || b._obj, name: b.name };
+}
+async function renderInspector() {
+  const body = $('#inspBody'); if (!body) return;
+  $('#inspHead .caret').textContent = inspOpen ? '▾' : '▸';
+  body.classList.toggle('hidden', !inspOpen);
+  $('#inspName').textContent = currentBrush ? currentBrush.name : '';
+  if (!inspOpen) return;
+  let o; try { o = await nativeOptions(); } catch (e) { return; }
+  const pr = penProfile(o);
+  body.innerHTML = '';
+  body.appendChild(el('div', 'inspTip', pr.tip + (pr.name ? ', ' + pr.name : '')));
+  const groups = {};
+  pr.rows.forEach((r) => (groups[r.control] = groups[r.control] || []).push(r));
+  if (!pr.rows.length) body.appendChild(el('div', 'inspNone', 'Nothing on this brush follows the pen.'));
+  Object.keys(groups).forEach((g) => {
+    body.appendChild(el('div', 'inspGroup', g));
+    groups[g].forEach((r) => {
+      const row = el('div', 'inspRow');
+      row.appendChild(el('span', 'inspWhat', r.what + (r.min ? '  (min ' + Math.round(r.min) + '%)' : '')));
+      const sw = el('div', 'b inspSw on', 'on');
+      sw.title = r.jitter ? 'Switch off this randomness' : 'Switch off this pen link';
+      sw.onclick = async () => {
+        const v = Object.assign({}, o[r.key]);
+        if (r.jitter) v.jitter = { _unit: 'percentUnit', _value: 0 }; else v.$bVTy = 0;
+        await ps_.toolOpts({ [r.key]: v }, 'Pen link').catch((e) => log('insp', e));
+        renderInspector();
+      };
+      row.appendChild(sw); body.appendChild(row);
+    });
+  });
+  if (pr.hidden.length) { body.appendChild(el('div', 'inspGroup', 'Built in')); pr.hidden.forEach((t) => body.appendChild(el('div', 'inspNote', t))); }
+  // one lever for everything pressure does, including bristle physics: Brush Pose with a fixed pressure
+  const fixed = o.useBrushPose && o.overridePosePressure;
+  const lv = el('div', 'b inspLever' + (fixed ? ' on' : ''), fixed ? 'Pen pressure: fixed (tap to use the pen again)' : 'Pen pressure: none (fix it at one value)');
+  lv.onclick = async () => {
+    const patch = fixed ? { overridePosePressure: false } : { useBrushPose: true, overridePosePressure: true, brushPosePressure: { _unit: 'percentUnit', _value: 60 } };
+    await ps_.toolOpts(patch, 'Pressure').catch((e) => log('lever', e));
+    renderInspector();
+  };
+  body.appendChild(lv);
+}
 
 /* ---------- library wiring ---------- */
 function initLibrary() {
@@ -434,6 +515,7 @@ function initLibrary() {
   const setView = (z) => { applyZoom(z); store.set('zoom', +z); vbtns.forEach((b) => b.classList.toggle('on', b.dataset.z == z)); };
   setView(store.get('zoom', 0));
   vbtns.forEach((b) => b.onclick = () => { setView(+b.dataset.z); render(); });
+  $('#inspHead').onclick = () => { inspOpen = !inspOpen; store.set('inspOpen', inspOpen); renderInspector(); };
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
   // <plugin data>/library.txt (if present) names the brush folder; otherwise the last folder picked
@@ -597,7 +679,7 @@ function initRail() {
       if (o && o.opacity != null && activeTool !== 'wetBrushTool') { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
     } catch (e) {}
   };
-  action.addNotificationListener(['set', 'select'], () => syncRail());
+  action.addNotificationListener(['set', 'select'], () => { syncRail(); clearTimeout(inspT); inspT = setTimeout(renderInspector, 250); });
 }
 
 

@@ -111,3 +111,20 @@ html, body { height: 100%; overflow: hidden; }
 .list.z2 .cell { width: 140px; } .list.z2 .tip { width: 134px; height: 134px; }
 .list.z1 .stroke { height: 60px; } .list.z2 .stroke { height: 84px; }
 .cover.tipCover { object-fit: contain; background: #f4f1ea; }
+
+/* pen inspector */
+.inspect { flex-shrink: 0; border-top: 1px solid var(--line); max-height: 45vh; overflow-y: auto; }
+.inspHead { display: flex; align-items: center; padding: 5px 8px; color: var(--fg); font-size: 11px; cursor: pointer; }
+.inspHead .caret { margin-right: 6px; color: var(--mut); }
+.inspName { margin-left: 8px; color: var(--mut); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inspBody { padding: 0 8px 8px; }
+.inspTip { color: var(--mut); font-size: 10px; margin-bottom: 4px; }
+.inspGroup { color: var(--hi); font-size: 10px; margin: 6px 0 2px; text-transform: uppercase; }
+.inspRow { display: flex; align-items: center; justify-content: space-between; padding: 2px 0; }
+.inspWhat { font-size: 11px; }
+.inspSw { font-size: 9px; padding: 1px 6px; }
+.inspSw.on { color: #fff; background: var(--hi); border-color: var(--hi); }
+.inspNote { color: var(--mut); font-size: 10px; line-height: 14px; margin: 2px 0; }
+.inspNone { color: var(--mut); font-size: 10px; }
+.inspLever { margin-top: 8px; font-size: 10px; text-align: center; }
+.inspLever.on { color: #fff; background: #b3542e; border-color: #b3542e; }

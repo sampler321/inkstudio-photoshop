@@ -3,7 +3,7 @@ Usage: catalogue.py <library_dir> [envato_meta.json] [covers_dir]
 Optional Envato metadata (title/author/description/tags) and cover images are matched by pack folder name."""
 import sys, os, json, re, hashlib
 sys.path.insert(0, os.path.dirname(__file__))
-import abr
+import abr, abrdesc
 from PIL import Image, ImageOps
 import shutil
 ONLY = None
@@ -30,12 +30,20 @@ for d in sorted(os.listdir(lib)):
             try: r = abr.read(p)
             except Exception as e: r = {'version': 0, 'names': [], 'samples': {}}
             nm = list(dict.fromkeys(r['names']))
+            # full preset settings: exact names in file order + a pen profile per brush
+            try: pres = abrdesc.presets(p)
+            except Exception: pres = []
+            profs = {}
+            if pres:
+                pn = [abrdesc.clean_name(x.get('Nm', '')) for x in pres]
+                if len(set(pn)) == len(pn) and all(pn): nm = pn
+                for x, n2 in zip(pres, pn): profs[n2] = abrdesc.profile(x)
             real = [n for n in nm if not re.match(r'(?i)sampled brush \d+', n)]
             nm = real or nm
             key = hashlib.md5(p.encode()).hexdigest()[:10]; tips = []
             for i, im in enumerate(list(r['samples'].values())):
                 t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn)
-            files.append({'file': os.path.relpath(p, lib), 'version': r['version'], 'brushes': nm, 'count': max(len(nm), len(r['samples'])), 'tips': tips})
+            files.append({'file': os.path.relpath(p, lib), 'version': r['version'], 'brushes': nm, 'count': max(len(nm), len(r['samples'])), 'tips': tips, 'pen': [profs.get(n2) for n2 in nm]})
     m = meta.get(d) or next((v for k, v in meta.items() if d.startswith(k) or k.startswith(d)), None)
     pj = os.path.join(pd, 'pack.json')   # a pack can describe itself: {title, author, description, tags}
     if os.path.exists(pj):
