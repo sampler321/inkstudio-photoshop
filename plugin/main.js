@@ -407,6 +407,7 @@ async function useBrush(p, f, b, cell) {
     await ps_.size(px);
     const native = await nativeOptions();   // the maker's settings, read before any switch touches them
     currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics, $szVr: native.$szVr, $opVr: native.$opVr, $prVr: native.$prVr, textureDepthDynamics: native.textureDepthDynamics } };
+    stripUrl = null;
     loadPressure && loadPressure(key(p, f, b));   // this brush's switches (default: the maker's design)
     applyPressure && await applyPressure();
     const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {});
@@ -510,6 +511,32 @@ async function renderInspector() {
 
 const pct = (v) => (v && typeof v === 'object' ? v._value : v);
 const P = (x) => ({ _unit: 'percentUnit', _value: x });
+
+/* test strip: paint a light-heavy-light pressure stroke with the current brush in a scratch document, show it here */
+let stripUrl = null;
+async function renderStrip() {
+  try {
+    const imaging = require('photoshop').imaging;
+    stripUrl = await core.executeAsModal(async () => {
+      const keep = app.activeDocument;
+      const W = 600, H = 150;
+      await action.batchPlay([{ _obj: 'make', new: { _obj: 'document', name: 'inkstudio-strip', width: { _unit: 'pixelsUnit', _value: W }, height: { _unit: 'pixelsUnit', _value: H }, resolution: { _unit: 'densityUnit', _value: 72 }, mode: { _class: 'RGBColorMode' }, fill: { _enum: 'fill', _value: 'white' } } }], {});
+      const pts = []; for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push([W * (0.06 + 0.88 * t), H * (0.5 + 0.28 * Math.sin(t * Math.PI * 2))]); }
+      await action.batchPlay([{ _obj: 'set', _target: [{ _ref: 'path', _property: 'workPath' }], to: { _obj: 'pathClass', pathComponents: [{ _obj: 'pathComponent', shapeOperation: { _enum: 'shapeOperation', _value: 'add' }, subpathListKey: [{ _obj: 'subpathsList', closedSubpath: false, points: pts.map(([x, y]) => ({ _obj: 'pathPoint', anchor: { _obj: 'paint', horizontal: { _unit: 'pixelsUnit', _value: x }, vertical: { _unit: 'pixelsUnit', _value: y } } })) }] }] } }], {});
+      const tool = activeTool === 'wetBrushTool' ? 'wetBrushTool' : 'paintbrushTool';
+      await action.batchPlay([{ _obj: 'stroke', _target: [{ _ref: 'path', _property: 'workPath' }], using: { _class: tool }, pressure: true }], {});
+      const doc = app.activeDocument;
+      const px = await imaging.getPixels({ documentID: doc.id, targetSize: { width: 300 } });
+      const b64 = await imaging.encodeImageData({ imageData: px.imageData, base64: true });
+      px.imageData.dispose();
+      await doc.closeWithoutSaving();
+      if (keep) app.activeDocument = keep;
+      return 'data:image/jpeg;base64,' + b64;
+    }, { commandName: 'Test strip' });
+  } catch (e) { log('strip', e); status('Test strip failed: ' + (e.message || e)); }
+  renderBrushPanel();
+}
+
 /* feel presets: tested combinations so nobody has to hand-tune minimums and jitter */
 const D = (c, min = 0, jit = 0) => ({ _obj: '$brVr', $bVTy: c, $fStp: 25, jitter: P(jit), minimum: P(min) });
 const FEELS = [
@@ -584,7 +611,9 @@ async function renderBrushPanel() {
   // 1. pen -> brush matrix
   body.appendChild(section('pen', 'Pen controls', (sec) => {
     const cur = (store.get('feel', {})[lastBrushKey]) || 'original';
-    sec.appendChild(kv('Feel', sel(FEELS.map((f) => [f[0], f[1]]), cur, (x) => applyFeel(x))));
+    sec.appendChild(kv('Feel', sel(FEELS.map((f) => [f[0], f[1]]), cur, (x) => applyFeel(x).then(renderStrip))));
+    const tb = el('div', 'b bpReset', stripUrl ? 'Test stroke again' : 'Test stroke (light, heavy, light)'); tb.onclick = () => renderStrip(); sec.appendChild(tb);
+    if (stripUrl) { const im = el('img', 'strip'); im.src = stripUrl; sec.appendChild(im); }
     const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
     const used = (keys, sw) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object'); const v = k && o[k]; return v && o[sw] !== false && (v.$bVTy || pct(v.jitter) > 0); };
     const extra = store.get('bpExtra', []);
@@ -899,6 +928,10 @@ async function devHook() {
       else if (c.op === 'click') { const r = document.getElementById(c.id).onclick(); if (r && r.then) await r; }
       else if (c.op === 'favs') { (c.add || []).forEach((k) => favs.add(k)); store.set('favs', [...favs]); render(); out = 'favs ' + favs.size; }
       else if (c.op === 'feel') { await applyFeel(c.id); }
+      else if (c.op === 'strip') {
+        await renderStrip(); out = stripUrl ? 'strip ' + stripUrl.length : 'no strip';
+        if (stripUrl) { const bin = atob(stripUrl.split(',')[1]); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const sf = await d.createFile('strip.jpg', { overwrite: true }); await sf.write(u.buffer, { format: storage.formats.binary }); }
+      }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
       else out = 'ERR unknown op ' + c.op;
