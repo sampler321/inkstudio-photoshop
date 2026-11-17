@@ -482,6 +482,10 @@ function initRail() {
     const t = b.dataset.tool; markTool(t); activeTool = t;
     try {
       if (t === 'paintbrushTool') await ps_.tool(t);
+      else if (t === 'eraserTool') {   // eraser: a plain round circle at the current size (textured tips erase unevenly)
+        await ps_.brush('Hard Round Pressure Size', t).catch(() => ps_.brush('Hard Round', t));
+        await ps_.size((currentBrush && currentBrush.px) || sliderToPx(size.value));
+      }
       else await ps_.carryBrush(t);
       if (t === 'wetBrushTool') { const w = store.get('wet', 50); await ps_.toolOpts(wetOpts(w), 'Wet'); op.value = w; opV.textContent = 'Wet ' + w + '%'; }
       else if (syncRail) syncRail();
