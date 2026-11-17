@@ -549,8 +549,29 @@ const FEELS = [
   ['charcoal', 'Charcoal / pastel', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 50, 10), $opVr: D(2, 10), $prVr: D(2, 20), angleDynamics: D(3, 0, 5), roundnessDynamics: D(3, 30), minimumRoundness: P(30) }],
   ['airbrush', 'Airbrush', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(0), $opVr: D(2, 0), $prVr: D(2, 0), angleDynamics: D(0), roundnessDynamics: D(0), repeat: true }],
 ];
+
+/* your own feels: snapshot of the current brush's pen behaviour, applicable to any brush */
+const FEEL_KEYS = ['$szVr', '$opVr', '$prVr', 'angleDynamics', 'roundnessDynamics', 'textureDepthDynamics', 'scatterDynamics', 'countDynamics',
+  'minimumDiameter', 'minimumRoundness', 'tiltScale', 'brushProjection', 'useTipDynamics', 'usePaintDynamics'];
+async function saveFeel(name) {
+  const o = await nativeOptions(); const snap = {};
+  FEEL_KEYS.forEach((k) => { if (k in o) snap[k] = o[k]; });
+  if (o.brush) { if (o.brush.angle) snap.brushAngle = o.brush.angle._value; if (o.brush.roundness) snap.brushRoundness = o.brush.roundness._value; }
+  const mine = store.get('myFeels', {}); const id = 'my:' + Date.now(); mine[id] = { name, patch: snap }; store.set('myFeels', mine);
+  if (lastBrushKey) { const m = store.get('feel', {}); m[lastBrushKey] = id; store.set('feel', m); }
+  status('Saved feel "' + name + '"'); renderBrushPanel();
+}
+function deleteFeel(id) { const mine = store.get('myFeels', {}); delete mine[id]; store.set('myFeels', mine); renderBrushPanel(); }
+async function saveBrushToPhotoshop(name) {
+  // Photoshop's "New Brush Preset" from the current tool settings
+  await play([{ _obj: 'make', _target: [{ _ref: 'brush' }], name, using: { _ref: [{ _ref: 'property', _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] } }], 'Save brush')
+    .then(() => status('Saved "' + name + '" to Photoshop\'s Brushes panel'))
+    .catch((e) => status('Could not save the brush: ' + (e.message || e)));
+}
+
 async function applyFeel(id) {
-  const f = FEELS.find((x) => x[0] === id); if (!f) return;
+  const mine = store.get('myFeels', {});
+  const f = FEELS.find((x) => x[0] === id) || (mine[id] && [id, mine[id].name, mine[id].patch]); if (!f) return;
   if (id === 'original') {   // back to the brush exactly as designed: re-select the preset, keep size
     if (currentBrush) { await ps_.brush(currentBrush.name, await currentTool()).catch(() => {}); await ps_.size(currentBrush.px); }
   } else {
@@ -616,7 +637,17 @@ async function renderBrushPanel() {
   // 1. pen -> brush matrix
   body.appendChild(section('pen', 'Pen controls', (sec) => {
     const cur = (store.get('feel', {})[lastBrushKey]) || 'original';
-    sec.appendChild(kv('Feel', sel(FEELS.map((f) => [f[0], f[1]]), cur, (x) => applyFeel(x).then(renderStrip))));
+    const mine = store.get('myFeels', {});
+    const opts = FEELS.map((f) => [f[0], f[1]]).concat(Object.keys(mine).map((id) => [id, '★ ' + mine[id].name]));
+    sec.appendChild(kv('Feel', sel(opts, cur, (x) => applyFeel(x).then(renderStrip))));
+    const row = el('div', 'bpKV');
+    const nameIn = document.createElement('input'); nameIn.type = 'text'; nameIn.className = 'bpName'; nameIn.placeholder = 'Name for this feel';
+    const sv = el('div', 'b bpTog', 'Save feel'); sv.onclick = () => { const n = (nameIn.value || '').trim(); if (n) saveFeel(n); else nameIn.focus(); };
+    row.appendChild(nameIn); row.appendChild(sv); sec.appendChild(row);
+    if (mine[cur]) { const del = el('div', 'b bpReset', 'Delete "' + mine[cur].name + '"'); del.onclick = () => deleteFeel(cur); sec.appendChild(del); }
+    const sb = el('div', 'b bpReset', 'Save brush to Photoshop'); sb.title = 'Adds the brush with all its current settings to Photoshop\'s Brushes panel';
+    sb.onclick = () => { const n = (nameIn.value || '').trim() || ((currentBrush && currentBrush.name) || 'Brush') + ' (mine)'; saveBrushToPhotoshop(n); };
+    sec.appendChild(sb);
     const tb = el('div', 'b bpReset', stripUrl ? 'Test stroke again' : 'Test stroke (light, heavy, light)'); tb.onclick = () => renderStrip(); sec.appendChild(tb);
     if (stripUrl) { const im = el('img', 'strip'); im.src = stripUrl; sec.appendChild(im); }
     const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
@@ -829,36 +860,44 @@ function initRail() {
       else ps_.opacity(Math.round(v)).catch((e) => log('opacity', e));
     } });
   showSize(); opV.textContent = '100%';
-  const pS = $('#pSize'), pO = $('#pOpacity');
-  // per brush, starting from the maker's design: on = the brush's own pressure/tilt links, off = silenced
-  const prsFor = (k) => Object.assign({ size: true, opacity: true, tilt: false }, (store.get('pressureBy', {})[k || 'default']) || {});
-  let prs = prsFor(lastBrushKey);
-  const savePrs = () => { const all = store.get('pressureBy', {}); all[lastBrushKey || 'default'] = { size: prs.size, opacity: prs.opacity, tilt: prs.tilt }; store.set('pressureBy', all); };
-  loadPressure = (k) => { prs = prsFor(k); paintP(); paintT(); return prs; };
-  const paintP = () => { pS.classList.toggle('on', prs.size); pO.classList.toggle('on', prs.opacity); };
-  // on = Photoshop's pressure overrides; off = also silence the brush's own pressure response, so off really means off
-  const OFF = { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 0 } };
-  const applyP = async () => {
-    try {
-      const cur = await nativeOptions();
-      const nat = (currentBrush && currentBrush.native) || {};
-      const PRESS = Object.assign({}, OFF, { $bVTy: 2 });
-      // on = the maker's own pressure settings (pressure added only where the brush had none); off = silent
-      const set = (k, on) => { if (!(k in cur)) return; patch[k] = !on ? OFF : (nat[k] || cur[k]); };
-      const patch = { usePressureOverridesSize: false, usePressureOverridesOpacity: false };   // the brush's own design decides
-      set('$szVr', prs.size);
-      set('$opVr', prs.opacity); set('$prVr', prs.opacity);   // opacity switch: opacity, flow
-      if (cur.useTexture) set('textureDepthDynamics', prs.opacity);   // ...and grain depth
-      await ps_.toolOpts(patch, 'Pressure');
-    } catch (e) { log('pressure', e); }
+  // ---- what the pen sends: global switches; pressure/tilt/button/eraser are cut at the source (pen relay),
+  // stroke-derived inputs (direction, fade) and pen features this pen lacks pause the brush links that use them
+  const INPUTS = [['pressure', 'Pressure', [2]], ['tilt', 'Tilt', [3]], ['rotation', 'Rotation', [7, 8]], ['wheel', 'Wheel', [4]],
+                  ['direction', 'Direction', [5, 6]], ['fade', 'Fade', [1]], ['barrel', 'Button', []], ['eraser', 'Eraser', []]];
+  let inputs = Object.assign({ pressure: true, tilt: true, rotation: true, wheel: true, direction: true, fade: true, barrel: true, eraser: true }, store.get('penInputs', {}));
+  let caps = { pressure: true, tilt: true, rotation: false, wheel: false, barrel: true, eraser: true };
+  const box = $('#penInputs');
+  const writeInputs = async () => { try { const d = await lfs.getDataFolder(); const f = await d.createFile('pen-inputs.json', { overwrite: true }); await f.write(JSON.stringify(inputs)); } catch (e) { log('inputs', e); } };
+  const readCaps = async () => { try { const d = await lfs.getDataFolder(); const f = await d.getEntry('pen-caps.json'); caps = Object.assign(caps, JSON.parse(await f.read())); } catch (e) {} };
+  const paintInputs = () => {
+    box.innerHTML = '';
+    INPUTS.forEach(([id, label]) => {
+      const sent = caps[id] !== false || ['direction', 'fade'].includes(id);
+      const t = el('div', 'b ptog' + (inputs[id] && sent ? ' on' : '') + (sent ? '' : ' na'), label);
+      t.title = sent ? (inputs[id] ? label + ' is sent to Photoshop. Tap to stop sending it.' : label + ' is off. Tap to send it again.') : label + ': not sent by this pen.';
+      if (sent) t.onclick = async () => { inputs[id] = !inputs[id]; store.set('penInputs', inputs); paintInputs(); await writeInputs(); await applyInputs(); };
+      box.appendChild(t);
+    });
   };
-  pS.onclick = () => { prs.size = !pS.classList.contains('on'); savePrs(); paintP(); applyP().then(() => syncRail && syncRail()); };
-  pO.onclick = () => { prs.opacity = !pO.classList.contains('on'); savePrs(); paintP(); applyP().then(() => syncRail && syncRail()); };
-  const pT = $('#pTilt');
-  const paintT = () => pT.classList.toggle('on', !!prs.tilt);
-  pT.onclick = () => { prs.tilt = !pT.classList.contains('on'); savePrs(); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
-  paintP(); paintT();
-  applyPressure = applyP;
+  // pause or restore brush links driven by inputs that are off (uses the brush's own settings to restore)
+  const OFF0 = { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 0 } };
+  const applyInputs = async () => {
+    try {
+      const cur = await nativeOptions(); const nat = (currentBrush && currentBrush.native) || {};
+      const offCodes = new Set(INPUTS.filter(([id]) => !inputs[id] && !['pressure', 'tilt', 'barrel', 'eraser'].includes(id)).flatMap(([, , c]) => c));
+      const patch = {};
+      ['$szVr', '$opVr', '$prVr', 'angleDynamics', 'roundnessDynamics', 'textureDepthDynamics', 'scatterDynamics', 'countDynamics'].forEach((k) => {
+        if (!(k in cur)) return;
+        const n = nat[k] || cur[k];
+        if (n && offCodes.has(n.$bVTy)) patch[k] = Object.assign({}, n, { $bVTy: 0 });
+        else if (n && n.$bVTy && cur[k].$bVTy === 0) patch[k] = n;   // input back on: restore
+      });
+      if (Object.keys(patch).length) await ps_.toolOpts(patch, 'Pen inputs');
+    } catch (e) { log('inputs', e); }
+  };
+  readCaps().then(paintInputs); writeInputs(); setInterval(() => readCaps().then(paintInputs), 10000);
+  applyPressure = applyInputs;
+  loadPressure = () => ({ tilt: false });
   let fxNow = { paper: false, wet: false, layer: false };
   fxNowRef = () => fxNow;
   const fxEls = { paper: $('#fxPaper'), wet: $('#fxWet'), layer: $('#fxLayer') };
@@ -913,9 +952,6 @@ function initRail() {
       // the switches show what the brush actually does right now (presets and the Brush panel can change it)
       if (o) {
         const on = (k, c) => o[k] && o[k].$bVTy === c;
-        $('#pSize').classList.toggle('on', on('$szVr', 2) || !!o.usePressureOverridesSize);
-        $('#pOpacity').classList.toggle('on', on('$opVr', 2) || on('$prVr', 2) || on('textureDepthDynamics', 2) || !!o.usePressureOverridesOpacity);
-        $('#pTilt').classList.toggle('on', on('angleDynamics', 3) || on('roundnessDynamics', 3));
         $('#fxWet').classList.toggle('on', !!o.wetEdges);
         $('#fxLayer').classList.toggle('on', !!(o.mode && o.mode._value === 'multiply'));
         if (!o.useTexture) { $('#fxPaper').classList.remove('on'); $('#fxPaper').classList.remove('own'); }
@@ -943,6 +979,9 @@ async function devHook() {
       else if (c.op === 'click') { const r = document.getElementById(c.id).onclick(); if (r && r.then) await r; }
       else if (c.op === 'favs') { (c.add || []).forEach((k) => favs.add(k)); store.set('favs', [...favs]); render(); out = 'favs ' + favs.size; }
       else if (c.op === 'feel') { await applyFeel(c.id); }
+      else if (c.op === 'delfeel') { Object.keys(store.get('myFeels', {})).filter((k) => store.get('myFeels', {})[k].name === c.name).forEach(deleteFeel); }
+      else if (c.op === 'savefeel') { await saveFeel(c.name); out = JSON.stringify(Object.keys(store.get('myFeels', {}))); }
+      else if (c.op === 'savebrush') { await saveBrushToPhotoshop(c.name); out = $('#status').textContent; }
       else if (c.op === 'strip') {
         await renderStrip(); out = stripUrl ? 'strip ' + stripUrl.length : 'no strip';
         if (stripUrl) { const bin = atob(stripUrl.split(',')[1]); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const sf = await d.createFile('strip.jpg', { overwrite: true }); await sf.write(u.buffer, { format: storage.formats.binary }); }
