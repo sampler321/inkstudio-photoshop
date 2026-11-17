@@ -161,3 +161,5 @@ html, body { height: 100%; overflow: hidden; }
 .bpKV .bpName { flex: 1; font-size: 10px; margin-right: 6px; }
 .tipBadge { font-size: 8px; color: #fff; background: #8a5a2b; border-radius: 3px; padding: 0 4px; margin-left: 4px; }
 .cellBadge { position: absolute; left: 4px; top: 4px; margin: 0; }
+.favHead { color: var(--mut); font-size: 10px; text-transform: uppercase; margin: 8px 2px 4px; }
+.favPack { opacity: 0.6; }

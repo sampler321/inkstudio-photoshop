@@ -233,6 +233,7 @@ const key = (p, f, b) => `b:${p.id}/${f.file}/${b}`;
 function render() {
   const list = $('#list'); if (!list) return;
   if (tab === 'mine') return renderMine(list);
+  if (tab === 'fav') return renderFavs(list);
   $('#empty').classList.toggle('hidden', !!LIB);
   list.classList.toggle('hidden', !LIB);
   renderChips();
@@ -251,6 +252,36 @@ function render() {
 }
 
 /* Mine: brushes you saved to Photoshop, shown with the preview of the brush they came from */
+
+/* Favourites: starred brushes as their own tiles; whole packs only when the pack itself is starred */
+function renderFavs(list) {
+  $('#empty').classList.toggle('hidden', !!LIB); list.classList.remove('hidden'); renderChips();
+  list.innerHTML = '';
+  if (!LIB) return;
+  const brushes = [];
+  LIB.packs.forEach((p) => p.files.forEach((f) => f.brushes.forEach((b, i) => { if (favs.has(key(p, f, b))) brushes.push({ p, f, b, i }); })));
+  const packs = LIB.packs.filter((p) => favs.has('pack:' + p.id));
+  if (!brushes.length && !packs.length) { list.appendChild(el('div', 'none', 'Star a brush or a pack to keep it here.')); return; }
+  if (brushes.length) {
+    list.appendChild(el('div', 'favHead', 'Brushes'));
+    const grid = el('div', 'grid');
+    brushes.forEach(({ p, f, b, i }) => {
+      const cell = el('div', 'cell');
+      const im = el('img', 'tip');
+      const pv = (f.tips && f.tips[i]) || (f.strokes && f.strokes[i]);
+      if (pv) lazyImg(im, LIB.root + '/.inkstudio/' + pv); else im.classList.add('blank');
+      cell.appendChild(im); cell.appendChild(el('div', 'name', b)); cell.appendChild(el('div', 'name favPack', p.name || p.title));
+      const st = star(key(p, f, b), () => render()); cell.appendChild(st);
+      { const tb = tipBadge(f, i); if (tb) cell.appendChild(el('span', 'tipBadge cellBadge', tb)); }
+      cell.title = b + ' (' + (p.name || p.title) + ')';
+      cell.onclick = () => useBrush(p, f, b, cell).catch(() => {});
+      grid.appendChild(cell);
+    });
+    list.appendChild(grid);
+  }
+  if (packs.length) { list.appendChild(el('div', 'favHead', 'Packs')); packs.forEach((p) => list.appendChild(packRow(p))); }
+}
+
 function renderMine(list) {
   $('#empty').classList.add('hidden'); list.classList.remove('hidden'); renderChips();
   list.innerHTML = '';
