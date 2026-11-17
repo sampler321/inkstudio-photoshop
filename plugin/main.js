@@ -428,7 +428,7 @@ function setTab() { document.querySelectorAll('#tabs .b').forEach((x) => x.class
 
 
 /* ---------- pen inspector: every way the current brush reacts to the pen, live from Photoshop, each switchable ---------- */
-const CONTROL = { 1: 'Fade', 2: 'Pressure', 3: 'Tilt', 4: 'Stylus wheel', 5: 'Rotation', 6: 'Initial direction', 7: 'Direction', 8: 'Pressure', 9: 'Stylus wheel' };
+const CONTROL = { 1: 'Fade', 2: 'Pressure', 3: 'Tilt', 4: 'Stylus wheel', 5: 'Initial direction', 6: 'Direction', 7: 'Initial rotation', 8: 'Rotation' };   // stored values, not menu order (docs/brush-settings-reference.md)
 const LINKS = [
   ['$szVr', 'size'], ['$opVr', 'opacity'], ['$prVr', 'flow'], ['angleDynamics', 'angle'], ['roundnessDynamics', 'roundness'],
   ['textureDepthDynamics', 'grain depth'], ['scatterDynamics', 'scatter'], ['countDynamics', 'dab count'], ['$clVr', 'colour'],
@@ -513,7 +513,7 @@ const ASPECTS = [   // [label, key candidates, switch that must be on for it to 
   ['Grain depth', ['textureDepthDynamics'], 'useTexture'], ['Scatter', ['scatterDynamics', '$scatterDynamics'], 'useScatter'],
   ['Dab count', ['countDynamics', '$countDynamics'], 'useScatter'], ['Colour', ['$clVr', 'clVr'], 'useColorDynamics'],
 ];
-const CONTROLS = [[0, 'Off'], [2, 'Pressure'], [3, 'Tilt'], [7, 'Direction'], [6, 'Initial direction'], [5, 'Rotation'], [1, 'Fade'], [4, 'Stylus wheel']];
+const CONTROLS = [[0, 'Off'], [2, 'Pressure'], [3, 'Tilt'], [6, 'Direction'], [5, 'Initial direction'], [8, 'Rotation'], [7, 'Initial rotation'], [1, 'Fade'], [4, 'Stylus wheel']];
 const pct = (v) => (v && typeof v === 'object' ? v._value : v);
 const P = (x) => ({ _unit: 'percentUnit', _value: x });
 let bpOpen = store.get('bpOpen', { pen: true, curve: true, tip: false, pose: false, paint: false });

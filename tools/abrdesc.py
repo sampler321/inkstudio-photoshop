@@ -78,8 +78,8 @@ if __name__ == '__main__':
     else: print(json.dumps(ps[0], indent=1)[:4000])
 
 # ---- pen profile: what a preset does with the pen, in plain terms (used by the catalogue and the panel) ----
-CONTROL = {1: 'fade', 2: 'pressure', 3: 'tilt', 4: 'wheel', 5: 'rotation', 6: 'initial direction', 7: 'direction',
-           8: 'pen pressure (legacy)', 9: 'stylus wheel (legacy)'}   # 8/9 seen in files; meaning pending Adobe docs
+CONTROL = {1: 'fade', 2: 'pressure', 3: 'tilt', 4: 'stylus wheel', 5: 'initial direction', 6: 'direction',
+           7: 'initial rotation', 8: 'rotation', 9: 'control 9'}   # stored values, see docs/brush-settings-reference.md
 DYN = {'szVr': 'size', 'opVr': 'opacity', 'prVr': 'flow', 'angleDynamics': 'angle', 'roundnessDynamics': 'roundness',
        'textureDepthDynamics': 'grain depth', 'scatterDynamics': 'scatter', 'countDynamics': 'dab count',
        'clVr': 'colour', 'wtVr': 'wetness', 'mxVr': 'mix'}
