@@ -430,8 +430,10 @@ function initLibrary() {
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value.trim(); render(); }, 150); });
   // view size, like Premiere's media zoom: 0 list, 1 two covers per row, 2 one large cover per row (brush tiles grow too)
   const applyZoom = (z) => { const l = $('#list'); ['z0', 'z1', 'z2'].forEach((c) => l.classList.remove(c)); l.classList.add('z' + z); };
-  const zoom = $('#zoom'); zoom.value = store.get('zoom', 0); applyZoom(zoom.value);
-  zoom.addEventListener('input', () => { applyZoom(zoom.value); store.set('zoom', +zoom.value); render(); });
+  const vbtns = document.querySelectorAll('#views .vbtn');
+  const setView = (z) => { applyZoom(z); store.set('zoom', +z); vbtns.forEach((b) => b.classList.toggle('on', b.dataset.z == z)); };
+  setView(store.get('zoom', 0));
+  vbtns.forEach((b) => b.onclick = () => { setView(+b.dataset.z); render(); });
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
   // <plugin data>/library.txt (if present) names the brush folder; otherwise the last folder picked

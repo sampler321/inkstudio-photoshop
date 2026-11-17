@@ -92,9 +92,9 @@ html, body { height: 100%; overflow: hidden; }
 .stroke.tipOnly { object-fit: contain; padding: 4px 0; }
 
 /* view size (footer slider) */
-.zoom { display: flex; align-items: center; }
-.zoom input { width: 70px; margin: 0 4px; }
-.zi { color: var(--mut); font-size: 10px; }
+.views { display: flex; align-items: center; }
+.views .vbtn { border: none; color: var(--mut); font-size: 13px; padding: 1px 6px; margin: 0 1px; border-radius: 4px; }
+.views .vbtn.on { color: var(--fg); background: rgba(255,255,255,0.12); }
 .grow { display: flex; flex-direction: row; align-items: flex-start; margin-bottom: 8px; }
 .list.z1 .grow .pack { width: 50%; margin: 0 4px 0 0; }
 .list.z2 .grow .pack { width: 100%; }
