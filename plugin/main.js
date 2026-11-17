@@ -132,6 +132,7 @@ const MEDIA = [
   ['Charcoal & pastel', /charcoal|pastel|chalk|crayon|conte|graphite stick/i],
   ['Spray & splatter', /spray|splatter|splash|drip|blot|airbrush|drop/i],
   ['Texture & grain', /texture|grain|noise|halftone|paper|grunge|stipple|dry ?brush|canvas/i],
+  ['Stamps', /(?!)/],
 ];
 let LIB = null;          // {root, packs}
 let loaded = new Set(store.get('loaded', []));
@@ -143,6 +144,8 @@ const open = new Set();
 
 function packMedia(p) {
   const hay = [p.title, (p.tags || []).join(' '), p.id].join(' ');
+  // stamps are single impressions, not stroke brushes: they live under Stamps only
+  if (/stamp/i.test(p.title + ' ' + p.id)) return ['Stamps'];
   return MEDIA.filter(([, re]) => re.test(hay)).map(([n]) => n);
 }
 async function readText(path) {
@@ -303,7 +306,7 @@ async function useBrush(p, f, b, cell) {
     Object.assign(fx, store.get('fx', {})[key(p, f, b)] || {});
     setFx && await setFx(fx);
     lastBrushKey = key(p, f, b);
-    currentBrush = { name: b, px };
+    currentBrush = { name: b, px }; activeTool = 'paintbrushTool';
     document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
     status(b + ' · ' + px + ' px');
@@ -327,6 +330,9 @@ function initLibrary() {
 }
 
 /* ---------- rail ---------- */
+// one "Wet" value (0 dry .. 100 soaking) drives the Mixer Brush's wetness, load and mix together
+const wetOpts = (w) => ({ wetness: Math.round(w), dryness: Math.round(Math.max(0, 100 - w * 1.15)), mix: Math.round(w), autoFill: w < 85, autoClean: true, sampleAllLayers: true });   // wet end = clean blender
+let activeTool = 'paintbrushTool';
 /* Procreate-style vertical slider: drag anywhere on the track, relative like a fader */
 function vslider(node, { min, max, value, onInput, onChange }) {
   let v = value, startY = 0, startV = 0, dragging = false;
@@ -359,13 +365,15 @@ function initRail() {
   const tools = document.querySelectorAll('.tool');
   const markTool = (t) => tools.forEach((x) => x.classList.toggle('on', x.dataset.tool === t));
   tools.forEach((b) => b.onclick = async () => {
-    const t = b.dataset.tool; markTool(t);
+    const t = b.dataset.tool; markTool(t); activeTool = t;
     try {
       if (currentBrush) {
         await ps_.brush(currentBrush.name, t);
         await ps_.size(currentBrush.px || sliderToPx(size.value));
         applyPressure && await applyPressure();
       } else await ps_.tool(t);
+      if (t === 'wetBrushTool') { const w = store.get('wet', 50); await ps_.toolOpts(wetOpts(w), 'Wet'); op.value = w; opV.textContent = 'Wet ' + w + '%'; }
+      else if (syncRail) syncRail();
     } catch (e) { log('tool', t, e); try { await ps_.tool(t); } catch (x) {} }
   });
   markTool('paintbrushTool');
@@ -379,9 +387,13 @@ function initRail() {
       if (currentBrush) currentBrush.px = px;
       ps_.size(px).catch((e) => log('size', e));
     } });
+  const opLabel = () => (activeTool === 'wetBrushTool' ? 'Wet ' : '');
   const op = vslider($('#opacity'), { min: 1, max: 100, value: 100,
-    onInput: (v) => { opV.textContent = Math.round(v) + '%'; },
-    onChange: (v) => ps_.opacity(Math.round(v)).catch((e) => log('opacity', e)) });
+    onInput: (v) => { opV.textContent = opLabel() + Math.round(v) + '%'; },
+    onChange: (v) => {
+      if (activeTool === 'wetBrushTool') { store.set('wet', Math.round(v)); ps_.toolOpts(wetOpts(v), 'Wet').catch((e) => log('wet', e)); }
+      else ps_.opacity(Math.round(v)).catch((e) => log('opacity', e));
+    } });
   showSize(); opV.textContent = '100%';
   const pS = $('#pSize'), pO = $('#pOpacity');
   const prs = store.get('pressure', { size: true, opacity: true });
@@ -430,7 +442,7 @@ function initRail() {
       const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
       const o = r[0] && r[0].currentToolOptions;
       if (o && o.brush && o.brush.diameter) { size.value = pxToSlider(o.brush.diameter._value); showSize(); }
-      if (o && o.opacity != null) { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
+      if (o && o.opacity != null && activeTool !== 'wetBrushTool') { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
     } catch (e) {}
   };
   action.addNotificationListener(['set', 'select'], () => syncRail());
