@@ -1193,6 +1193,14 @@ async function devHook() {
       else if (c.op === 'unmine') { await play([{ _obj: 'delete', _target: [{ _ref: 'brush', _name: c.name }] }]).catch(() => {}); store.set('myBrushes', store.get('myBrushes', []).filter((x) => x.name !== c.name)); }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
+      else if (c.op === 'ui') { for (const a of c.do) {   // dev: drive the UI without the mouse (screenshots for the manual)
+          const n = a.sel ? document.querySelector(a.sel) : null;
+          if (a.click) { if (n.onclick) await n.onclick({ stopPropagation() {}, target: n }); else n.click(); }
+          if ('top' in a) n.scrollTop = a.top;
+          if (a.panel) await require('uxp').entrypoints.getPanel(a.panel).show();
+          if (a.wait) await new Promise((r) => setTimeout(r, a.wait));
+          if (a.eval) out = String(await (new Function('return (async () => {' + a.eval + '})()'))());
+        } }
       else out = 'ERR unknown op ' + c.op;
     } catch (e) { out = 'ERR ' + (e.stack || e); }
     const o = await d.createFile('cmd.out', { overwrite: true }); await o.write(out + '\n' + LOG.slice(-5).join('\n'));

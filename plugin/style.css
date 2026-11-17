@@ -166,3 +166,13 @@ html, body { height: 100%; overflow: hidden; }
 .bpHelpTxt { color: var(--mut); font-size: 10px; line-height: 14px; margin: 1px 0 6px; opacity: 0.85; }
 .bpKVwrap { margin-bottom: 2px; }
 .bpKVwrap .bpHelpTxt { margin-top: 0; }
+/* compact rail: everything fits on a laptop-height screen */
+.rail > * { margin-bottom: 3px; }
+.rail .b { height: 26px; line-height: 26px; font-size: 15px; }
+.vs { height: 78px; margin: 2px 0; }
+.rail .ptog { height: 18px !important; line-height: 18px !important; }
+.penInputs .ptog { margin-bottom: 2px; }
+.rail label { margin-top: 2px; }
+.rail .sep { margin: 2px 0 4px; }
+.pair { display: flex; flex-direction: row; }
+.pair .b { width: 24px !important; margin-right: 2px; font-size: 13px; }
