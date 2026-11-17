@@ -510,7 +510,17 @@ function initRail() {
   const pS = $('#pSize'), pO = $('#pOpacity');
   const prs = store.get('pressure', { size: true, opacity: true });
   const paintP = () => { pS.classList.toggle('on', prs.size); pO.classList.toggle('on', prs.opacity); };
-  const applyP = () => ps_.toolOpts({ usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity }, 'Pressure').catch((e) => log('pressure', e));
+  // on = Photoshop's pressure overrides; off = also silence the brush's own pressure response, so off really means off
+  const OFF = { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 0 } };
+  const applyP = async () => {
+    try {
+      const cur = await nativeOptions();
+      const patch = { usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity };
+      if (!prs.size && '$szVr' in cur) patch.$szVr = OFF;
+      if (!prs.opacity) ['$opVr', '$prVr'].forEach((k) => { if (k in cur) patch[k] = OFF; });   // opacity and flow
+      await ps_.toolOpts(patch, 'Pressure');
+    } catch (e) { log('pressure', e); }
+  };
   pS.onclick = () => { prs.size = !prs.size; store.set('pressure', prs); paintP(); applyP(); };
   pO.onclick = () => { prs.opacity = !prs.opacity; store.set('pressure', prs); paintP(); applyP(); };
   const pT = $('#pTilt');
