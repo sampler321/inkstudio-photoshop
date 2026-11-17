@@ -164,3 +164,5 @@ html, body { height: 100%; overflow: hidden; }
 .favHead { color: var(--mut); font-size: 10px; text-transform: uppercase; margin: 8px 2px 4px; }
 .favPack { opacity: 0.6; }
 .bpHelpTxt { color: var(--mut); font-size: 10px; line-height: 14px; margin: 1px 0 6px; opacity: 0.85; }
+.bpKVwrap { margin-bottom: 2px; }
+.bpKVwrap .bpHelpTxt { margin-top: 0; }

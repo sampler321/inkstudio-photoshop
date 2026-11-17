@@ -703,6 +703,52 @@ const ASPECT_HELP = {
   'Dab count': 'How many dabs per step. More = denser, darker strokes.',
   'Colour': 'Mixes between foreground and background colour, for colour that varies within a stroke.',
 };
+
+const FIELD_HELP = {
+  'Tool': 'Which Photoshop tool paints. Some brushes switch it (blenders use Smudge, Real Oils the Mixer Brush).',
+  'Opacity %': 'Ceiling for how dark a single stroke gets. Overlapping strokes do not go past it while you keep the pen down.',
+  'Flow %': 'Paint per dab. Below 100% strokes are see-through and build up where they overlap, like graphite or watercolour.',
+  'Mode': 'How paint mixes with what is underneath. Multiply darkens like marker or glaze; Normal covers.',
+  'Build-up (airbrush)': 'Paint keeps flowing while the pen rests in one spot, like an airbrush.',
+  'Wet edges': 'Pigment collects at the edge of the stroke and the middle stays lighter, like watercolour drying.',
+  'Noise': 'Adds grain to soft brush edges. Mostly for soft round brushes.',
+  'Texture': 'Paper grain inside the stroke. Depth, scale and mode below tune it.',
+  'Protect texture': 'Keeps the same paper grain when you switch between textured brushes, so the paper stays consistent.',
+  'Scatter': 'Dabs jump off the line (spray, foliage, splatter). Amount and count are in Pen controls.',
+  'Colour dynamics': 'Colour varies while you paint (hue, saturation, brightness, foreground/background mix).',
+  'Shape dynamics': 'Master switch for size, angle and roundness reacting to the pen. Off = those pen controls do nothing.',
+  'Transfer': 'Master switch for opacity and flow reacting to the pen. Off = those pen controls do nothing.',
+  'Dual brush': 'A second tip cuts holes into the first, for broken, textured edges (charcoal, dry brush).',
+  'Grain depth %': 'How strongly the paper grain shows. 0 = smooth, 100 = only the raised paper gets paint.',
+  'Grain scale %': 'Size of the paper grain. Bigger = coarser paper.',
+  'Grain mode': 'How the grain cuts into paint. Subtract and Height read as graphite on tooth; Multiply is rougher.',
+  'Smoothing %': 'Steadies the line by lagging behind the pen. Higher = smoother curves, slower response (Procreate StreamLine).',
+  'Wetness %': 'Mixer Brush: how much paint it picks up from the canvas. High = blends more.',
+  'Load %': 'Mixer Brush: how much paint is on the brush. Low runs out along the stroke.',
+  'Mix %': 'Mixer Brush: canvas paint versus brush paint. High = mostly canvas colour.',
+  'Smallest size %': 'The thinnest the line gets when pressure or tilt drives size.',
+  'Flattest roundness %': 'The most squashed the tip gets when roundness follows the pen.',
+  'Tilt scale %': 'How much tilt grows the tip when size follows tilt.',
+  'Brush projection (tilt shapes the tip)': 'Tilt and rotation reshape the tip directly, like a real brush lying down. Needs a pen that sends tilt.',
+  'Top-bar pressure for size': 'Photoshop button that forces pressure on size for every brush, overriding the brush.',
+  'Top-bar pressure for opacity': 'Photoshop button that forces pressure on opacity for every brush, overriding the brush.',
+  'Brush pose': 'Master switch for the overrides below.',
+  'Override Tilt X': 'Pretend the pen leans left/right by this amount.', 'Override Tilt Y': 'Pretend the pen leans forward/back by this amount.',
+  'Override Rotation': 'Pretend the pen is turned by this angle.', 'Override Pressure': 'Use this pressure instead of the real one: the brush behaves the same however hard you press.',
+  'Bend (soft − / hard +)': 'Minus = light touches already give a lot (soft pen). Plus = you have to press harder (firm pen).',
+  'Pen starts at %': 'Pressure below this counts as nothing: ignores feather-light touches.',
+  'Full at %': 'Pressure above this already counts as full: less effort for full strokes.',
+  'Lightest output %': 'The least pressure Photoshop ever sees while drawing.', 'Strongest output %': 'The most pressure Photoshop ever sees.',
+};
+const TIP_FIELDS = {   // readable names for tip values
+  diameter: ['Size', 'Tip size in pixels.'], angle: ['Angle', 'Which way the tip points.'], roundness: ['Roundness', '100% round, lower = flatter.'],
+  hardness: ['Hardness', 'Edge softness of a round tip.'], spacing: ['Spacing', 'Gap between dabs as % of size. Low = smooth line, high = separate stamps.'],
+  density: ['Bristles', 'How many bristles, as density.'], length: ['Length', 'Bristle length. Long = floppy, streaky.'],
+  thickness: ['Thickness', 'Thickness of each bristle.'], stiffness: ['Stiffness', 'Stiff bristles keep their shape; soft ones splay out.'],
+  clumping: ['Clumping', 'How much bristles stick together in clumps.'], shape: ['Shape', 'Bristle tip shape (round, flat, fan...).'],
+  physics: ['Physics', 'Bristles bend under pressure and tilt.'],
+};
+const TOOL_NAMES = { paintbrushTool: 'Brush', wetBrushTool: 'Mixer Brush', smudgeTool: 'Smudge', eraserTool: 'Eraser', pencilTool: 'Pencil' };
 let bpHelp = store.get('bpHelp', true);
 const helpLine = (t) => el('div', 'bpHelpTxt', t);
 
@@ -804,12 +850,13 @@ async function renderBrushPanel() {
     Object.keys(b).filter((k) => !skip.has(k)).forEach((k) => {
       const v = b[k];
       const put = (val) => setOpt({ brush: Object.assign({}, b, { [k]: val }) }, 'Tip');
-      if (typeof v === 'boolean') sec.appendChild(kv(k, tog(v, (x) => put(x))));
-      else if (typeof v === 'number') sec.appendChild(kv(k, num(v, (x) => put(x))));
+      const [nm, hp] = TIP_FIELDS[k] || [k.replace(/^dtips/, '').replace(/([A-Z])/g, ' $1').trim().replace(/^./, (c) => c.toUpperCase()), ''];
+      if (typeof v === 'boolean') sec.appendChild(kv(nm, tog(v, (x) => put(x)), hp));
+      else if (typeof v === 'number') sec.appendChild(kv(nm, num(v, (x) => put(x)), hp));
       else if (v && typeof v === 'object' && '_value' in v) {
         const frac = v._unit === 'percentUnit' && b._obj === 'dBrush' && Math.abs(v._value) <= 1.5;   // bristle values are stored as fractions
-        sec.appendChild(kv(k + (v._unit === 'pixelsUnit' ? ' px' : v._unit === 'angleUnit' ? ' °' : ' %'),
-          num(frac ? v._value * 100 : v._value, (x) => put({ _unit: v._unit, _value: frac ? x / 100 : x }))));
+        sec.appendChild(kv(nm + (v._unit === 'pixelsUnit' ? ' px' : v._unit === 'angleUnit' ? ' °' : ' %'),
+          num(frac ? v._value * 100 : v._value, (x) => put({ _unit: v._unit, _value: frac ? x / 100 : x })), hp));
       }
     });
     if (b._obj === 'dBrush') sec.appendChild(el('div', 'bpNote', 'Bristle tips react to pressure and tilt through their physics: more pressure presses more bristles onto the paper. Use the pose pressure override to fix it.'));
@@ -822,7 +869,7 @@ async function renderBrushPanel() {
       const row = el('div', 'bpKV'); row.appendChild(el('span', 'bpKey', 'Override ' + lab));
       row.appendChild(tog(!!o[ov], (x) => setOpt({ useBrushPose: true, [ov]: x })));
       row.appendChild(num(pct(o[val]), (x) => setOpt({ useBrushPose: true, [val]: (o[val] && o[val]._unit) ? { _unit: o[val]._unit, _value: x } : (lab === 'Pressure' ? P(x) : x) })));
-      sec.appendChild(row);
+      sec.appendChild(row); if (bpHelp && FIELD_HELP['Override ' + lab]) sec.appendChild(helpLine(FIELD_HELP['Override ' + lab]));
     });
   }));
   // 5. tool & paint (what presets carry as tool settings)
@@ -841,7 +888,7 @@ async function renderBrushPanel() {
       if (!sec.querySelector('.bpKV')) add(el('div', 'bpNote', 'All at Photoshop defaults.'));
       return;
     }
-    sec.appendChild(kv('Tool', el('span', 'bpVal', activeTool)));
+    sec.appendChild(kv('Tool', el('span', 'bpVal', TOOL_NAMES[activeTool] || activeTool)));
     sec.appendChild(kv('Opacity %', num(o.opacity, (x) => setOpt({ opacity: Math.round(x) }))));
     if ('flow' in o) sec.appendChild(kv('Flow %', num(o.flow, (x) => setOpt({ flow: Math.round(x) }))));
     if (o.mode) sec.appendChild(kv('Mode', sel([['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['softLight', 'Soft light'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color', 'Colour'], ['luminosity', 'Luminosity'], ['dissolve', 'Dissolve'], ['behind', 'Behind']], o.mode._value, (x) => setOpt({ mode: { _enum: 'blendMode', _value: x } }))));
@@ -856,7 +903,12 @@ async function renderBrushPanel() {
     ['wetness', 'dryness', 'mix'].forEach((k) => { if (k in o) sec.appendChild(kv(k === 'dryness' ? 'Load %' : k[0].toUpperCase() + k.slice(1) + ' %', num(o[k], (x) => setOpt({ [k]: Math.round(x) })))); });
   }));
 }
-function kv(label, ctl) { const r = el('div', 'bpKV'); r.appendChild(el('span', 'bpKey', label)); r.appendChild(ctl); return r; }
+function kv(label, ctl, help) {
+  const r = el('div', 'bpKV'); const k = el('span', 'bpKey', label); const h = help || FIELD_HELP[label]; if (h) k.title = h;
+  r.appendChild(k); r.appendChild(ctl);
+  if (!bpHelp || !h) return r;
+  const w = el('div', 'bpKVwrap'); w.appendChild(r); w.appendChild(helpLine(h)); return w;   // description under the control
+}
 /* pressure curve: in -> out with a floor, a ceiling and a bend; saved per brush, read by the pen relay */
 async function curveFile() { const d = await lfs.getDataFolder(); return d; }
 function curveFor(k) { return Object.assign({ inLo: 0, inHi: 100, outLo: 0, outHi: 100, bend: 0 }, (store.get('curves', {})[k || 'default']) || {}); }
