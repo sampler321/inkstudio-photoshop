@@ -774,7 +774,7 @@ function section(id, title, build) {
   const head = el('div', 'bpSecHead'); head.appendChild(el('span', 'caret', bpOpen[id] ? '▾' : '▸')); head.appendChild(el('span', '', title));
   head.onclick = () => { bpOpen[id] = !bpOpen[id]; store.set('bpOpen', bpOpen); renderBrushPanel(); };
   wrap.appendChild(head);
-  if (bpOpen[id]) { const body = el('div', 'bpSecBody'); build(body); wrap.appendChild(body); }
+  if (bpOpen[id]) { const body = el('div', 'bpSecBody'); try { build(body); } catch (e) { log('section ' + id, e); body.appendChild(el('div', 'bpNote', 'Could not show this section: ' + e.message)); } wrap.appendChild(body); }
   return wrap;
 }
 function num(value, onSet, opts = {}) {
@@ -1189,12 +1189,13 @@ async function devHook() {
         await renderStrip(); out = stripUrl ? 'strip ' + stripUrl.length : 'no strip';
         if (stripUrl) { const bin = atob(stripUrl.split(',')[1]); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const sf = await d.createFile('strip.jpg', { overwrite: true }); await sf.write(u.buffer, { format: storage.formats.binary }); }
       }
+      else if (c.op === 'state') { out = JSON.stringify({ bpOpen, bpHelp }); }
       else if (c.op === 'mine') { out = JSON.stringify(store.get('myBrushes', [])); }
       else if (c.op === 'unmine') { await play([{ _obj: 'delete', _target: [{ _ref: 'brush', _name: c.name }] }]).catch(() => {}); store.set('myBrushes', store.get('myBrushes', []).filter((x) => x.name !== c.name)); }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
       else if (c.op === 'ui') { for (const a of c.do) {   // dev: drive the UI without the mouse (screenshots for the manual)
-          const n = a.sel ? document.querySelector(a.sel) : null;
+          const n = !a.sel ? null : a.text ? Array.from(document.querySelectorAll(a.sel)).find((x) => x.textContent.includes(a.text)) : document.querySelector(a.sel);
           if (a.click) { if (n.onclick) await n.onclick({ stopPropagation() {}, target: n }); else n.click(); }
           if ('top' in a) n.scrollTop = a.top;
           if (a.panel) await require('uxp').entrypoints.getPanel(a.panel).show();

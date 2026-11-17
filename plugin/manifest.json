@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "inkstudio.photoshop",
   "name": "InkStudio",
-  "version": "0.1.62",
+  "version": "0.1.64",
   "main": "index.html",
   "host": {
     "app": "PS",
