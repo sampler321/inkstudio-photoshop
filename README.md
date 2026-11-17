@@ -3,7 +3,14 @@
 Procreate-simple drawing and painting in Photoshop. One brush library panel and one slim rail; everything else in
 Photoshop stays where it is, and every control drives Photoshop's own painting engine.
 
+Sister projects: [InkStudio for Illustrator](https://github.com/sampler321/inkstudio-illustrator) and [PenCast](https://github.com/sampler321/pencast).
+
 Brushes are **not** included. Point the panel at your own folder of `.abr` packs.
+
+## Manual
+
+[InkStudio for Photoshop.pdf](docs/InkStudio%20for%20Photoshop.pdf) covers every panel, brush and pen setting, each traditional medium and an icon
+reference. A print edition with two A5 pages per landscape A4 sheet (duplex, bound at the top) is next to it.
 
 ## The panel
 
