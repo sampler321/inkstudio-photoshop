@@ -523,7 +523,7 @@ function initRail() {
   const paintFx = () => {
     Object.keys(fxEls).forEach((k) => fxEls[k].classList.toggle('on', !!fxNow[k]));
     fxEls.paper.classList.toggle('own', !!fxNow.own && !fxNow.paper);
-    fxEls.paper.textContent = fxNow.own && !fxNow.paper ? 'Paper: own' : 'Paper';
+    fxEls.paper.textContent = 'Paper';   // dashed border = the brush's own grain (rail is too narrow for more text)
     fxEls.paper.title = fxNow.own && !fxNow.paper ? "This brush brings its own paper grain. Tap to use InkStudio paper instead." : 'Paper grain: texture shows through';
   };
   setFx = async (fx) => {

@@ -76,7 +76,7 @@ html, body { height: 100%; overflow: hidden; }
 .recentColors .swatch { margin: 0 3px 3px 0; }
 .swatch { width: 12px !important; height: 12px !important; border-radius: 6px !important; border: none !important; }
 
-.rail .ptog { font-size: 9px !important; height: 22px !important; line-height: 22px !important; color: var(--mut); }
+.rail .ptog { font-size: 9px !important; height: 22px !important; line-height: 22px !important; color: var(--mut); white-space: nowrap; overflow: hidden; }
 .rail .ptog.on { color: #fff; background: var(--hi); border-color: var(--hi); }
 .rail .tool.on { background: var(--hi); border-color: var(--hi); color: #fff; }
 .rail .ptog.own { color: var(--fg); border-style: dashed; }
