@@ -13,7 +13,7 @@ jsx = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jsx', 'render-st
 cat = json.load(open(catp))
 def kind(p):   # stamps and effects look like their tip image; stroke brushes need a painted preview
     t = (p['title'] + ' ' + p['id']).lower()
-    if 'stamp' in t: return 'stamp'
+    if 'stamp' in t or re.search(r'brush[- ]strokes|paint[- ]strokes?|strokes[- ]brushes', t): return 'stamp'   # big pictures of strokes
     if re.search(r'splatter|splash|stain|spray|drop|blot|texture|grunge|halftone|xresch|bokeh|effect', t): return 'effect'
     return 'stroke'
 if ids == ['strokes']:
