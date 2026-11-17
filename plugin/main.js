@@ -39,9 +39,9 @@ const ps_ = {
     // same descriptor as app.load(): set application.brush to the file, appending
     await play([{ _obj: 'set', _target: [{ _ref: 'property', _property: 'brush' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }], to: { _path: token, _kind: 'local' }, append: true }], 'Load brushes');
   },
-  async brush(name) {
+  async brush(name, tool = 'paintbrushTool') {
     await play([
-      { _obj: 'select', _target: [{ _ref: 'paintbrushTool' }] },
+      { _obj: 'select', _target: [{ _ref: tool }] },
       { _obj: 'select', _target: [{ _ref: 'brush', _name: name }] },
     ], 'Select brush');
   },
@@ -74,6 +74,41 @@ const ps_ = {
     await play([{ _obj: 'set', _target: [{ _ref: 'color', _property: 'foregroundColor' }], to: { _obj: 'RGBColor', red: rgb.red, grain: rgb.green, blue: rgb.blue }, source: 'photoshopPicker' }], 'Colour');
   },
 };
+// paper grain: plugin/assets/paper-tooth.png becomes the "InkStudio Paper" pattern the first time it is needed
+let paperReady = false;
+async function ensurePaper() {
+  if (paperReady || store.get('paperDefined', false)) { paperReady = true; return; }
+  const pf = await lfs.getPluginFolder();
+  const png = await pf.getEntry('assets/paper-tooth.png');
+  const token = lfs.createSessionToken(png);
+  await modal('Paper', async () => {
+    const keep = app.activeDocument;
+    await action.batchPlay([{ _obj: 'open', null: { _path: token, _kind: 'local' } }], {});
+    await action.batchPlay([
+      { _obj: 'set', _target: [{ _ref: 'channel', _property: 'selection' }], to: { _enum: 'ordinal', _value: 'allEnum' } },
+      { _obj: 'make', _target: [{ _ref: 'pattern' }], using: { _ref: [{ _ref: 'property', _property: 'selection' }, { _ref: 'document', _enum: 'ordinal', _value: 'targetEnum' }] }, name: 'InkStudio Paper' },
+      { _obj: 'close', saving: { _enum: 'yesNo', _value: 'no' } },
+    ], {});
+    if (keep) app.activeDocument = keep;
+  });
+  store.set('paperDefined', true); paperReady = true;
+}
+/* media behaviour: which Photoshop painting features a medium switches on (all visible as rail toggles) */
+const MEDIUM_FX = {
+  'Pencil':            { paper: true,  wet: false, layer: false },
+  'Charcoal & pastel': { paper: true,  wet: false, layer: false },
+  'Watercolour':       { paper: true,  wet: true,  layer: true },
+  'Marker':            { paper: false, wet: false, layer: true },
+};
+function fxPatch(fx) {
+  const p = { wetEdges: !!fx.wet, mode: { _enum: 'blendMode', _value: fx.layer ? 'multiply' : 'normal' }, useTexture: !!fx.paper };
+  if (fx.paper) Object.assign(p, {
+    texture: { _obj: 'pattern', name: 'InkStudio Paper' }, textureScale: { _unit: 'percentUnit', _value: 100 }, textureBlendMode: { _enum: 'blendMode', _value: 'height' },
+    textureDepth: { _unit: 'percentUnit', _value: 70 }, minimumDepth: { _unit: 'percentUnit', _value: 15 },
+    textureDepthDynamics: { _obj: 'brVr', bVTy: 2, fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 15 } },
+  });
+  return p;
+}
 async function currentTool() {
   const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'tool' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
   return (r[0] && r[0].tool && r[0].tool._enum) || 'paintbrushTool';
@@ -96,7 +131,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
-let lastBrushKey = null, syncRail = null, applyPressure = null;
+let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null;
 const open = new Set();
 
 function packMedia(p) {
@@ -253,7 +288,11 @@ async function useBrush(p, f, b, cell) {
     const px = sizes[key(p, f, b)] || 120;
     await ps_.size(px);
     applyPressure && await applyPressure();
+    const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {}, store.get('fx', {})[key(p, f, b)] || {});
+    setFx && await setFx(fx);
     lastBrushKey = key(p, f, b);
+    currentBrush = { name: b, px };
+    document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
     status(b + ' · ' + px + ' px');
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
@@ -304,7 +343,20 @@ function paintColor() {
   recentColors.slice(0, 8).forEach((c) => { const b = el('div', 'b swatch'); b.style.backgroundColor = `rgb(${c.red},${c.green},${c.blue})`; b.onclick = async () => { await ps_.setColor(c); paintColor(); }; rc.appendChild(b); });
 }
 function initRail() {
-  document.querySelectorAll('.tool').forEach((b) => b.onclick = () => ps_.tool(b.dataset.tool).catch((e) => console.error(e)));
+  // Procreate: erase / smudge / wet-mix with the brush you are painting with, at the same size
+  const tools = document.querySelectorAll('.tool');
+  const markTool = (t) => tools.forEach((x) => x.classList.toggle('on', x.dataset.tool === t));
+  tools.forEach((b) => b.onclick = async () => {
+    const t = b.dataset.tool; markTool(t);
+    try {
+      if (currentBrush) {
+        await ps_.brush(currentBrush.name, t);
+        await ps_.size(currentBrush.px || sliderToPx(size.value));
+        applyPressure && await applyPressure();
+      } else await ps_.tool(t);
+    } catch (e) { log('tool', t, e); try { await ps_.tool(t); } catch (x) {} }
+  });
+  markTool('paintbrushTool');
   const sizeV = $('#sizeV'), opV = $('#opV');
   const showSize = () => { sizeV.textContent = sliderToPx(size.value) + ' px'; };
   const size = vslider($('#size'), { min: 0, max: 1000, value: pxToSlider(120),
@@ -312,6 +364,7 @@ function initRail() {
     onChange: (v) => {
       const px = sliderToPx(v);
       if (lastBrushKey) { const m = store.get('sizes', {}); m[lastBrushKey] = px; store.set('sizes', m); }
+      if (currentBrush) currentBrush.px = px;
       ps_.size(px).catch((e) => log('size', e));
     } });
   const op = vslider($('#opacity'), { min: 1, max: 100, value: 100,
@@ -326,6 +379,19 @@ function initRail() {
   pO.onclick = () => { prs.opacity = !prs.opacity; store.set('pressure', prs); paintP(); applyP(); };
   paintP();
   applyPressure = applyP;
+  let fxNow = { paper: false, wet: false, layer: false };
+  const fxEls = { paper: $('#fxPaper'), wet: $('#fxWet'), layer: $('#fxLayer') };
+  const paintFx = () => Object.keys(fxEls).forEach((k) => fxEls[k].classList.toggle('on', !!fxNow[k]));
+  setFx = async (fx) => {
+    fxNow = fx; paintFx();
+    try { if (fx.paper) await ensurePaper(); await ps_.toolOpts(fxPatch(fx), 'Media'); } catch (e) { log('fx', e); }
+  };
+  Object.keys(fxEls).forEach((k) => fxEls[k].onclick = () => {
+    const fx = Object.assign({}, fxNow, { [k]: !fxNow[k] });
+    if (lastBrushKey) { const m = store.get('fx', {}); m[lastBrushKey] = fx; store.set('fx', m); }   // remembered per brush
+    setFx(fx);
+  });
+  paintFx();
   $('#undo').onclick = () => ps_.step('previous').catch((e) => console.error(e));
   $('#redo').onclick = () => ps_.step('next').catch((e) => console.error(e));
   $('#color').onclick = async () => {
