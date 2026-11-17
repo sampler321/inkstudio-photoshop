@@ -491,6 +491,16 @@ function initRail() {
     setFx(fx);
   });
   paintFx();
+  // finishing: Photoshop's Oil Paint filter on a merged copy, so the painting underneath stays untouched
+  // finishing: Photoshop's Oil Paint filter on a merged copy in Soft Light (paint gains relief, white paper stays clean);
+  // the painting underneath is untouched, hide or delete the layer to undo the look
+  $('#impasto').onclick = () => play([
+    { _obj: 'make', _target: [{ _ref: 'layer' }] },
+    { _obj: 'mergeVisible', duplicate: true },
+    { _obj: 'oilPaint', stylization: 4, cleanliness: 6, brushScale: 1, microBrush: 2, lightingOn: true, lightDirection: -60, specularity: 1.3 },
+    { _obj: 'set', _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'layer', name: 'Impasto (oil paint)' } },
+    { _obj: 'set', _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'layer', mode: { _enum: 'blendMode', _value: 'softLight' } } },
+  ], 'Impasto').catch((e) => log('impasto', e));
   $('#undo').onclick = () => ps_.step('previous').catch((e) => console.error(e));
   $('#redo').onclick = () => ps_.step('next').catch((e) => console.error(e));
   $('#color').onclick = async () => {
@@ -529,8 +539,10 @@ async function devHook() {
         await useBrush(p, fl, c.brush || fl.brushes[0], null).catch((e) => { out = 'ERR ' + (e.message || e); });
       } else if (c.op === 'fx') { await setFx(c.fx); }
       else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
+      else if (c.op === 'click') { const r = document.getElementById(c.id).onclick(); if (r && r.then) await r; }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
+      else out = 'ERR unknown op ' + c.op;
     } catch (e) { out = 'ERR ' + (e.stack || e); }
     const o = await d.createFile('cmd.out', { overwrite: true }); await o.write(out + '\n' + LOG.slice(-5).join('\n'));
   } catch (e) {}
