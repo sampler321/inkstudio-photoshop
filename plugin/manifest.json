@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "inkstudio.photoshop",
   "name": "InkStudio",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "main": "index.html",
   "host": {
     "app": "PS",
@@ -44,7 +44,7 @@
       },
       "minimumSize": {
         "width": 64,
-        "height": 300
+        "height": 660
       },
       "preferredDockedSize": {
         "width": 72,
@@ -52,7 +52,7 @@
       },
       "preferredFloatingSize": {
         "width": 72,
-        "height": 600
+        "height": 680
       },
       "maximumSize": {
         "width": 1200,

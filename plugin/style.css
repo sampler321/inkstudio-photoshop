@@ -55,11 +55,17 @@ body { background: var(--bg); color: var(--fg); font-size: 12px; margin: 0; }
 
 /* rail */
 .rail { align-items: center; padding: 6px 4px; gap: 4px; }
+.rail > * { flex-shrink: 0; }
 .rail .b { width: 40px; height: 30px; font-size: 16px; padding: 0; line-height: 30px; }
 .rail label { font-size: 9px; color: var(--mut); margin-top: 4px; }
 .rail .val { font-size: 9px; color: var(--mut); }
-.rail input.v { width: 56px; }
+.vs { position: relative; width: 22px; height: 130px; border-radius: 11px; background: rgba(255,255,255,0.08); overflow: hidden; margin: 4px 0; }
+.vs .fill { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.28); }
+.vs .knob { position: absolute; left: 3px; right: 3px; height: 8px; border-radius: 4px; background: var(--fg); }
 .sep { width: 32px; height: 1px; background: var(--line); margin: 4px 0; }
 .color { border-radius: 16px !important; width: 32px !important; height: 32px !important; border: 2px solid var(--fg) !important; }
 .recentColors { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; width: 48px; }
 .swatch { width: 12px !important; height: 12px !important; border-radius: 6px !important; border: none !important; }
+
+.rail .ptog { font-size: 9px !important; height: 22px !important; line-height: 22px !important; color: var(--mut); }
+.rail .ptog.on { color: #fff; background: var(--hi); border-color: var(--hi); }

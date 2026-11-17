@@ -48,10 +48,16 @@ const ps_ = {
   async size(px) {
     await play([{ _obj: 'set', _target: [{ _ref: 'brush', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'brush', masterDiameter: { _unit: 'pixelsUnit', _value: px } } }], 'Brush size');
   },
-  async opacity(pct) {
+  // tool options must be read, patched and written back whole: a partial set resets the rest
+  async toolOpts(patch, name = 'Brush options') {
     const t = await currentTool();
-    await play([{ _obj: 'set', _target: [{ _ref: t }], to: { _obj: 'currentToolOptions', opacity: pct } }], 'Opacity');
+    await modal(name, async () => {
+      const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
+      const cur = (r[0] && r[0].currentToolOptions) || {};
+      await action.batchPlay([{ _obj: 'set', _target: [{ _ref: t }], to: Object.assign({}, cur, { _obj: 'currentToolOptions' }, patch) }], {});
+    });
   },
+  async opacity(pct) { await ps_.toolOpts({ opacity: pct }, 'Opacity'); },
   async step(dir) {
     await play([{ _obj: 'select', _target: [{ _ref: 'historyState', _enum: 'ordinal', _value: dir }] }], dir === 'previous' ? 'Undo' : 'Redo');
   },
@@ -90,7 +96,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
-let lastBrushKey = null, syncRail = null;
+let lastBrushKey = null, syncRail = null, applyPressure = null;
 const open = new Set();
 
 function packMedia(p) {
@@ -246,6 +252,7 @@ async function useBrush(p, f, b, cell) {
     const sizes = store.get('sizes', {});
     const px = sizes[key(p, f, b)] || 120;
     await ps_.size(px);
+    applyPressure && await applyPressure();
     lastBrushKey = key(p, f, b);
     syncRail && syncRail();
     status(b + ' · ' + px + ' px');
@@ -270,6 +277,24 @@ function initLibrary() {
 }
 
 /* ---------- rail ---------- */
+/* Procreate-style vertical slider: drag anywhere on the track, relative like a fader */
+function vslider(node, { min, max, value, onInput, onChange }) {
+  let v = value, startY = 0, startV = 0, dragging = false;
+  const fill = node.querySelector('.fill'), knob = node.querySelector('.knob');
+  const paint = () => { const t = (v - min) / (max - min); fill.style.height = (t * 100) + '%'; knob.style.bottom = `calc(${t * 100}% - 4px)`; };
+  const h = () => node.getBoundingClientRect().height || 160;
+  node.addEventListener('pointerdown', (e) => { dragging = true; startY = e.clientY; startV = v; try { node.setPointerCapture(e.pointerId); } catch (x) {} });
+  node.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    v = Math.max(min, Math.min(max, startV + (startY - e.clientY) / h() * (max - min)));
+    paint(); onInput && onInput(v);
+  });
+  const end = () => { if (!dragging) return; dragging = false; onChange && onChange(v); };
+  node.addEventListener('pointerup', end); node.addEventListener('pointercancel', end);
+  paint();
+  return { get value() { return v; }, set value(x) { v = Math.max(min, Math.min(max, x)); paint(); } };
+}
+
 const SIZE_MIN = 1, SIZE_MAX = 2500;
 const sliderToPx = (v) => Math.round(SIZE_MIN * Math.pow(SIZE_MAX / SIZE_MIN, v / 1000));
 const pxToSlider = (px) => Math.round(1000 * Math.log(px / SIZE_MIN) / Math.log(SIZE_MAX / SIZE_MIN));
@@ -281,17 +306,27 @@ function paintColor() {
 }
 function initRail() {
   document.querySelectorAll('.tool').forEach((b) => b.onclick = () => ps_.tool(b.dataset.tool).catch((e) => console.error(e)));
-  const size = $('#size'), sizeV = $('#sizeV'), op = $('#opacity'), opV = $('#opV');
-  const showSize = () => { sizeV.textContent = sliderToPx(+size.value) + ' px'; };
-  size.addEventListener('input', showSize);
-  size.addEventListener('change', () => {
-    const px = sliderToPx(+size.value);
-    if (lastBrushKey) { const m = store.get('sizes', {}); m[lastBrushKey] = px; store.set('sizes', m); }
-    ps_.size(px).catch((e) => log('size', e));
-  });
-  op.addEventListener('input', () => { opV.textContent = op.value + '%'; });
-  op.addEventListener('change', () => ps_.opacity(+op.value).catch((e) => console.error(e)));
-  showSize(); opV.textContent = op.value + '%';
+  const sizeV = $('#sizeV'), opV = $('#opV');
+  const showSize = () => { sizeV.textContent = sliderToPx(size.value) + ' px'; };
+  const size = vslider($('#size'), { min: 0, max: 1000, value: pxToSlider(120),
+    onInput: () => showSize(),
+    onChange: (v) => {
+      const px = sliderToPx(v);
+      if (lastBrushKey) { const m = store.get('sizes', {}); m[lastBrushKey] = px; store.set('sizes', m); }
+      ps_.size(px).catch((e) => log('size', e));
+    } });
+  const op = vslider($('#opacity'), { min: 1, max: 100, value: 100,
+    onInput: (v) => { opV.textContent = Math.round(v) + '%'; },
+    onChange: (v) => ps_.opacity(Math.round(v)).catch((e) => log('opacity', e)) });
+  showSize(); opV.textContent = '100%';
+  const pS = $('#pSize'), pO = $('#pOpacity');
+  const prs = store.get('pressure', { size: true, opacity: true });
+  const paintP = () => { pS.classList.toggle('on', prs.size); pO.classList.toggle('on', prs.opacity); };
+  const applyP = () => ps_.toolOpts({ usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity }, 'Pressure').catch((e) => log('pressure', e));
+  pS.onclick = () => { prs.size = !prs.size; store.set('pressure', prs); paintP(); applyP(); };
+  pO.onclick = () => { prs.opacity = !prs.opacity; store.set('pressure', prs); paintP(); applyP(); };
+  paintP();
+  applyPressure = applyP;
   $('#undo').onclick = () => ps_.step('previous').catch((e) => console.error(e));
   $('#redo').onclick = () => ps_.step('next').catch((e) => console.error(e));
   $('#color').onclick = async () => {
@@ -309,7 +344,7 @@ function initRail() {
       const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
       const o = r[0] && r[0].currentToolOptions;
       if (o && o.brush && o.brush.diameter) { size.value = pxToSlider(o.brush.diameter._value); showSize(); }
-      if (o && o.opacity != null) { op.value = o.opacity; opV.textContent = o.opacity + '%'; }
+      if (o && o.opacity != null) { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
     } catch (e) {}
   };
   action.addNotificationListener(['set', 'select'], () => syncRail());
