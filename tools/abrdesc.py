@@ -112,7 +112,7 @@ def profile(p):
     if isinstance(p.get('dualBrush'), dict) and p['dualBrush'].get('useDualBrush'): out['hidden'].append('dual brush: a second tip cuts into the first')
     to = p.get('toolOptions')
     if isinstance(to, dict):
-        tool = {'PbTl': 'brush', 'SmTl': 'smudge', 'ErTl': 'eraser', 'wetBrushTool': 'mixer brush', 'PcTl': 'pencil'}.get(to.get('_class'), to.get('_class'))
+        tool = {'PbTl': 'brush', 'SmTl': 'smudge', 'ErTl': 'eraser', 'wetBrushTool': 'mixer brush', 'MixB': 'mixer brush', 'PcTl': 'pencil', 'ABTl': 'art history brush'}.get(to.get('_class'), to.get('_class'))
         out['tool'] = tool
         if tool not in ('brush', None): out['hidden'].append('switches the tool to ' + tool)
         for k, label in DYN.items():   # tool-level dynamics travel with the preset too
