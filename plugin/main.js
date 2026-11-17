@@ -6,6 +6,15 @@ const ps = require('photoshop');
 const { app, core, action } = ps;
 const lfs = storage.localFileSystem;
 
+/* debug log -> <plugin data>/inkstudio.log (UXP has no console without the dev tool) */
+const LOG = [];
+async function log(...a) {
+  LOG.push(new Date().toISOString().slice(11, 19) + ' ' + a.map((x) => (x && x.stack) || (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' '));
+  try { const d = await lfs.getDataFolder(); const f = await d.createFile('inkstudio.log', { overwrite: true }); await f.write(LOG.join('\n')); } catch (e) {}
+}
+window.addEventListener && window.addEventListener('error', (e) => log('window error', e.message || e));
+log('start');
+
 /* ---------- storage helpers ---------- */
 const store = {
   get(k, d) { try { const v = localStorage.getItem('ink.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -81,6 +90,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
+let lastBrushKey = null, syncRail = null;
 const open = new Set();
 
 function packMedia(p) {
@@ -110,7 +120,13 @@ function lazyImg(img, path) { imgUrl(path).then((u) => { img.src = u; }); }
 async function loadLibrary(root) {
   try {
     const cat = JSON.parse(await readText(root + '/.inkstudio/catalog.json'));
-    cat.packs.forEach((p) => { p.media = packMedia(p); });
+    const SAMPLE = /^Sampled Brush \d+/i;
+    cat.packs.forEach((p) => {
+      p.media = packMedia(p);
+      // .abr files also name each sampled tip ("Sampled Brush 3 1"); keep only real preset names
+      p.files.forEach((f) => { const real = f.brushes.filter((b) => !SAMPLE.test(b)); if (real.length) f.brushes = [...new Set(real)]; });
+      p.count = p.files.reduce((a, f) => a + Math.max(f.brushes.length, f.tips.length ? 1 : 0), 0);
+    });
     LIB = { root, packs: cat.packs.filter((p) => p.count > 0) };
     store.set('root', root);
     const n = LIB.packs.reduce((a, p) => a + p.count, 0);
@@ -154,14 +170,14 @@ function renderChips() {
   MEDIA.forEach(([n]) => {
     const cnt = LIB.packs.filter((p) => p.media.includes(n)).length;
     if (!cnt) return;
-    const b = el('button', 'chip' + (media === n ? ' on' : ''), n);
+    const b = el('div', 'b chip' + (media === n ? ' on' : ''), n);
     b.title = `${cnt} packs`;
     b.onclick = () => { media = media === n ? null : n; render(); };
     c.appendChild(b);
   });
 }
 function star(k, onChange) {
-  const s = el('button', 'star' + (favs.has(k) ? ' on' : ''), favs.has(k) ? '★' : '☆');
+  const s = el('div', 'b star' + (favs.has(k) ? ' on' : ''), favs.has(k) ? '★' : '☆');
   s.title = 'Favourite';
   s.onclick = (ev) => { ev.stopPropagation(); favs.has(k) ? favs.delete(k) : favs.add(k); store.set('favs', [...favs]); s.textContent = favs.has(k) ? '★' : '☆'; s.classList.toggle('on', favs.has(k)); onChange && onChange(); };
   return s;
@@ -186,13 +202,13 @@ function packBody(p) {
   // Envato's own description, collapsed to a few lines until asked
   if (p.description) {
     const d = el('div', 'desc clamp', p.description.replace(/[*_#>]+/g, '').replace(/\n{2,}/g, '\n').trim());
-    const more = el('button', 'link', 'More');
+    const more = el('div', 'b link', 'More');
     more.onclick = () => { const c = d.classList.toggle('clamp'); more.textContent = c ? 'More' : 'Less'; };
     body.appendChild(d); body.appendChild(more);
   }
   if (p.tags && p.tags.length) {
     const t = el('div', 'tags');
-    p.tags.slice(0, 12).forEach((tg) => { const b = el('button', 'tag', tg); b.onclick = () => { query = tg; $('#q').value = tg; tab = 'packs'; setTab(); render(); }; t.appendChild(b); });
+    p.tags.slice(0, 12).forEach((tg) => { const b = el('div', 'b tag', tg); b.onclick = () => { query = tg; $('#q').value = tg; tab = 'packs'; setTab(); render(); }; t.appendChild(b); });
     body.appendChild(t);
   }
   p.files.forEach((f) => {
@@ -226,21 +242,31 @@ async function useBrush(p, f, b, cell) {
       loaded.add(path); store.set('loaded', [...loaded]);
     }
     await ps_.brush(b);
-    status(b);
+    // Envato tips are huge (often 2000-5000 px); start at the size last used with this brush, else 120 px
+    const sizes = store.get('sizes', {});
+    const px = sizes[key(p, f, b)] || 120;
+    await ps_.size(px);
+    lastBrushKey = key(p, f, b);
+    syncRail && syncRail();
+    status(b + ' · ' + px + ' px');
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
     store.set('recent', recent);
   } catch (e) { status('Could not select: ' + (e.message || e)); }
 }
-function setTab() { document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab)); }
+function setTab() { document.querySelectorAll('#tabs .b').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab)); }
 
 /* ---------- library wiring ---------- */
 function initLibrary() {
-  document.querySelectorAll('#tabs button').forEach((b) => b.onclick = () => { tab = b.dataset.tab; setTab(); render(); });
+  document.querySelectorAll('#tabs .b').forEach((b) => b.onclick = () => { tab = b.dataset.tab; setTab(); render(); });
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value.trim(); render(); }, 150); });
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
   const root = store.get('root', null);
-  if (root) loadLibrary(root); else render();
+  if (root) return loadLibrary(root);
+  // fallback: <plugin data>/library.txt holds a default brush folder path
+  lfs.getDataFolder().then((d) => d.getEntry('library.txt')).then((f) => f.read())
+    .then((p) => { p = p.trim(); if (p) loadLibrary(p); else render(); })
+    .catch(() => render());
 }
 
 /* ---------- rail ---------- */
@@ -251,14 +277,18 @@ let recentColors = store.get('colors', []);
 function paintColor() {
   try { const c = app.foregroundColor.rgb; $('#color').style.backgroundColor = `rgb(${c.red},${c.green},${c.blue})`; } catch (e) {}
   const rc = $('#recentColors'); rc.innerHTML = '';
-  recentColors.slice(0, 8).forEach((c) => { const b = el('button', 'swatch'); b.style.backgroundColor = `rgb(${c.red},${c.green},${c.blue})`; b.onclick = async () => { await ps_.setColor(c); paintColor(); }; rc.appendChild(b); });
+  recentColors.slice(0, 8).forEach((c) => { const b = el('div', 'b swatch'); b.style.backgroundColor = `rgb(${c.red},${c.green},${c.blue})`; b.onclick = async () => { await ps_.setColor(c); paintColor(); }; rc.appendChild(b); });
 }
 function initRail() {
   document.querySelectorAll('.tool').forEach((b) => b.onclick = () => ps_.tool(b.dataset.tool).catch((e) => console.error(e)));
   const size = $('#size'), sizeV = $('#sizeV'), op = $('#opacity'), opV = $('#opV');
   const showSize = () => { sizeV.textContent = sliderToPx(+size.value) + ' px'; };
   size.addEventListener('input', showSize);
-  size.addEventListener('change', () => ps_.size(sliderToPx(+size.value)).catch((e) => console.error(e)));
+  size.addEventListener('change', () => {
+    const px = sliderToPx(+size.value);
+    if (lastBrushKey) { const m = store.get('sizes', {}); m[lastBrushKey] = px; store.set('sizes', m); }
+    ps_.size(px).catch((e) => log('size', e));
+  });
   op.addEventListener('input', () => { opV.textContent = op.value + '%'; });
   op.addEventListener('change', () => ps_.opacity(+op.value).catch((e) => console.error(e)));
   showSize(); opV.textContent = op.value + '%';
@@ -273,7 +303,7 @@ function initRail() {
   };
   paintColor();
   // keep the rail in step with brush size / colour changed elsewhere
-  action.addNotificationListener(['set', 'select'], async () => {
+  syncRail = async () => {
     paintColor();
     try {
       const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
@@ -281,17 +311,19 @@ function initRail() {
       if (o && o.brush && o.brush.diameter) { size.value = pxToSlider(o.brush.diameter._value); showSize(); }
       if (o && o.opacity != null) { op.value = o.opacity; opV.textContent = o.opacity + '%'; }
     } catch (e) {}
-  });
+  };
+  action.addNotificationListener(['set', 'select'], () => syncRail());
 }
 
 /* ---------- panel entrypoints ---------- */
 const mount = (id) => ({
   show(ev) {
+    log('show', id, ev && (ev.node ? 'node' : typeof ev));
     const node = (ev && ev.node) || ev || document.body;
     const part = document.getElementById(id);
     if (part && part.parentNode !== node && node.appendChild) node.appendChild(part);
   },
 });
-entrypoints.setup({ panels: { library: mount('library'), rail: mount('rail') } });
-initLibrary();
-initRail();
+try { entrypoints.setup({ panels: { library: mount('library'), rail: mount('rail') } }); log('setup ok'); } catch (e) { log('setup', e); }
+try { initLibrary(); log('library ok'); } catch (e) { log('initLibrary', e); }
+try { initRail(); log('rail ok'); } catch (e) { log('initRail', e); }

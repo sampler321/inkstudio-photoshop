@@ -26,6 +26,8 @@ for d in sorted(os.listdir(lib)):
             try: r = abr.read(p)
             except Exception as e: r = {'version': 0, 'names': [], 'samples': {}}
             nm = list(dict.fromkeys(r['names']))
+            real = [n for n in nm if not re.match(r'(?i)sampled brush \d+', n)]
+            nm = real or nm
             key = hashlib.md5(p.encode()).hexdigest()[:10]; tips = []
             for i, im in enumerate(list(r['samples'].values())[:12]):
                 t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn)
