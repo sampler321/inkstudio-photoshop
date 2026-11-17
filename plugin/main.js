@@ -754,6 +754,8 @@ const FIELD_HELP = {
   'Wetness %': 'Mixer Brush: how much paint it picks up from the canvas. High = blends more.',
   'Load %': 'Mixer Brush: how much paint is on the brush. Low runs out along the stroke.',
   'Mix %': 'Mixer Brush: canvas paint versus brush paint. High = mostly canvas colour.',
+  'Random flip X': 'Mirrors dabs left to right at random. With random angle it stops an image tip from repeating as a visible pattern.',
+  'Random flip Y': 'Mirrors dabs top to bottom at random.',
   'Smallest size %': 'The thinnest the line gets when pressure or tilt drives size.',
   'Flattest roundness %': 'The most squashed the tip gets when roundness follows the pen.',
   'Tilt scale %': 'How much tilt grows the tip when size follows tilt.',
@@ -859,6 +861,9 @@ async function renderBrushPanel() {
     });
     if (!sec.querySelector('.bpRow:not(.bpHdr)')) sec.appendChild(el('div', 'bpNote', 'Nothing on this brush follows the pen.'));
     if (hidden.length) sec.appendChild(kv('Add pen link', sel([['', 'choose…']].concat(hidden.map((h) => [h, h])), '', (x) => { if (x) { store.set('bpExtra', extra.concat([x])); renderBrushPanel(); } })));
+    // random mirroring per dab (Shape Dynamics flip jitter): with angle randomness it hides repeating tip patterns
+    if ('flipX' in o) sec.appendChild(kv('Random flip X', tog(!!o.flipX, (x) => setOpt({ flipX: x, useTipDynamics: true }))));
+    if ('flipY' in o) sec.appendChild(kv('Random flip Y', tog(!!o.flipY, (x) => setOpt({ flipY: x, useTipDynamics: true }))));
     if (!bpAll) { if (sec.querySelector('.bpRow:not(.bpHdr)') && o.minimumDiameter && o.$szVr && o.$szVr.$bVTy) sec.appendChild(kv('Smallest size %', num(pct(o.minimumDiameter), (x) => setOpt({ minimumDiameter: P(x) })))); return; }
     if (o.minimumDiameter) sec.appendChild(kv('Smallest size %', num(pct(o.minimumDiameter), (x) => setOpt({ minimumDiameter: P(x) }))));
     if (o.minimumRoundness) sec.appendChild(kv('Flattest roundness %', num(pct(o.minimumRoundness), (x) => setOpt({ minimumRoundness: P(x) }))));
