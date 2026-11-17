@@ -237,7 +237,15 @@ function render() {
   list.innerHTML = '';
   const packs = visiblePacks();
   if (LIB && !packs.length) list.appendChild(el('div', 'none', tab === 'fav' ? 'Star a pack or a brush to keep it here.' : 'Nothing matches.'));
-  packs.slice(0, 400).forEach((p) => list.appendChild(packRow(p)));
+  // gallery views: explicit rows (UXP can't wrap stacked cards), an open pack gets a full row
+  const per = { 0: 0, 1: 2, 2: 1 }[store.get('zoom', 0)] || 0;
+  if (!per) { packs.slice(0, 400).forEach((p) => list.appendChild(packRow(p))); return; }
+  let row = null;
+  packs.slice(0, 400).forEach((p) => {
+    if (open.has(p.id)) { row = null; const r = el('div', 'grow'); r.appendChild(packRow(p)); list.appendChild(r); return; }
+    if (!row || row.childNodes.length >= per) { row = el('div', 'grow'); list.appendChild(row); }
+    row.appendChild(packRow(p));
+  });
 }
 function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
@@ -277,7 +285,7 @@ function packRow(p) {
   sub.appendChild(el('span', 'count', `${p.count} brushes`));
   meta.appendChild(sub);
   head.appendChild(thumb); head.appendChild(meta); head.appendChild(star('pack:' + p.id));
-  head.onclick = () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); row.replaceWith(packRow(p)); };
+  head.onclick = () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); if (store.get('zoom', 0)) render(); else row.replaceWith(packRow(p)); };
   row.appendChild(head);
   if (open.has(p.id)) row.appendChild(packBody(p));
   return row;
@@ -423,7 +431,7 @@ function initLibrary() {
   // view size, like Premiere's media zoom: 0 list, 1 two covers per row, 2 one large cover per row (brush tiles grow too)
   const applyZoom = (z) => { const l = $('#list'); ['z0', 'z1', 'z2'].forEach((c) => l.classList.remove(c)); l.classList.add('z' + z); };
   const zoom = $('#zoom'); zoom.value = store.get('zoom', 0); applyZoom(zoom.value);
-  zoom.addEventListener('input', () => { applyZoom(zoom.value); store.set('zoom', +zoom.value); });
+  zoom.addEventListener('input', () => { applyZoom(zoom.value); store.set('zoom', +zoom.value); render(); });
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
   // <plugin data>/library.txt (if present) names the brush folder; otherwise the last folder picked
