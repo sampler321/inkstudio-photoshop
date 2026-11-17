@@ -507,6 +507,38 @@ async function renderInspector() {
 }
 
 
+
+const pct = (v) => (v && typeof v === 'object' ? v._value : v);
+const P = (x) => ({ _unit: 'percentUnit', _value: x });
+/* feel presets: tested combinations so nobody has to hand-tune minimums and jitter */
+const D = (c, min = 0, jit = 0) => ({ _obj: '$brVr', $bVTy: c, $fStp: 25, jitter: P(jit), minimum: P(min) });
+const FEELS = [
+  ['original', "Maker's original", null],
+  ['pencil', 'Pencil (side shading)', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 40), $opVr: D(2, 15), $prVr: D(2, 30), angleDynamics: D(3), roundnessDynamics: D(3, 25), minimumRoundness: P(25), tiltScale: P(150) }],
+  ['fineliner', 'Fineliner', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 80), $opVr: D(0), $prVr: D(0), angleDynamics: D(0), roundnessDynamics: D(0) }],
+  ['brushpen', 'Brush pen', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 5), $opVr: D(0), $prVr: D(2, 70), angleDynamics: D(6), roundnessDynamics: D(2, 60) }],
+  ['chisel', 'Chisel marker', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(0), $opVr: D(0), $prVr: D(0), angleDynamics: D(0), roundnessDynamics: D(0), brushAngle: 45, brushRoundness: 30, mode: { _enum: 'blendMode', _value: 'multiply' } }],
+  ['calligraphy', 'Calligraphy', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 50), $opVr: D(0), $prVr: D(0), angleDynamics: D(0), roundnessDynamics: D(0), brushAngle: 30, brushRoundness: 20 }],
+  ['charcoal', 'Charcoal / pastel', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(2, 50, 10), $opVr: D(2, 10), $prVr: D(2, 20), angleDynamics: D(3, 0, 5), roundnessDynamics: D(3, 30), minimumRoundness: P(30) }],
+  ['airbrush', 'Airbrush', { useTipDynamics: true, usePaintDynamics: true, $szVr: D(0), $opVr: D(2, 0), $prVr: D(2, 0), angleDynamics: D(0), roundnessDynamics: D(0), repeat: true }],
+];
+async function applyFeel(id) {
+  const f = FEELS.find((x) => x[0] === id); if (!f) return;
+  if (id === 'original') {   // back to the brush exactly as designed: re-select the preset, keep size
+    if (currentBrush) { await ps_.brush(currentBrush.name, await currentTool()).catch(() => {}); await ps_.size(currentBrush.px); }
+  } else {
+    const r = Object.assign({}, f[2]);
+    const o = await nativeOptions(); const tip = Object.assign({}, o.brush || {});
+    if ('brushAngle' in r) { tip.angle = { _unit: 'angleUnit', _value: r.brushAngle }; delete r.brushAngle; }
+    if ('brushRoundness' in r) { tip.roundness = P(r.brushRoundness); delete r.brushRoundness; }
+    if (tip.angle || tip.roundness) r.brush = tip;
+    Object.keys(r).forEach((k) => { if (!(k in o) && k[0] === '$') delete r[k]; });
+    await ps_.toolOpts(r, 'Feel: ' + f[1]).catch((e) => log('feel', e));
+  }
+  if (lastBrushKey) { const m = store.get('feel', {}); m[lastBrushKey] = id; store.set('feel', m); }
+  renderBrushPanel();
+}
+
 /* ---------- Brush panel: every brush setting the pen can touch, editable ---------- */
 const ASPECTS = [   // [label, key candidates, switch that must be on for it to work]
   ['Size', ['$szVr'], 'useTipDynamics'], ['Opacity', ['$opVr'], 'usePaintDynamics'], ['Flow', ['$prVr'], 'usePaintDynamics'],
@@ -515,8 +547,6 @@ const ASPECTS = [   // [label, key candidates, switch that must be on for it to 
   ['Dab count', ['countDynamics', '$countDynamics'], 'useScatter'], ['Colour', ['$clVr', 'clVr'], 'useColorDynamics'],
 ];
 const CONTROLS = [[0, 'Off'], [2, 'Pressure'], [3, 'Tilt'], [6, 'Direction'], [5, 'Initial direction'], [8, 'Rotation'], [7, 'Initial rotation'], [1, 'Fade'], [4, 'Stylus wheel']];
-const pct = (v) => (v && typeof v === 'object' ? v._value : v);
-const P = (x) => ({ _unit: 'percentUnit', _value: x });
 let bpAll = store.get('bpAll', false);
 let bpOpen = store.get('bpOpen', { pen: true, curve: true, tip: false, pose: false, paint: false });
 function section(id, title, build) {
@@ -553,6 +583,8 @@ async function renderBrushPanel() {
   body.innerHTML = '';
   // 1. pen -> brush matrix
   body.appendChild(section('pen', 'Pen controls', (sec) => {
+    const cur = (store.get('feel', {})[lastBrushKey]) || 'original';
+    sec.appendChild(kv('Feel', sel(FEELS.map((f) => [f[0], f[1]]), cur, (x) => applyFeel(x))));
     const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
     const used = (keys, sw) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object'); const v = k && o[k]; return v && o[sw] !== false && (v.$bVTy || pct(v.jitter) > 0); };
     const extra = store.get('bpExtra', []);
@@ -866,6 +898,7 @@ async function devHook() {
       else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
       else if (c.op === 'click') { const r = document.getElementById(c.id).onclick(); if (r && r.then) await r; }
       else if (c.op === 'favs') { (c.add || []).forEach((k) => favs.add(k)); store.set('favs', [...favs]); render(); out = 'favs ' + favs.size; }
+      else if (c.op === 'feel') { await applyFeel(c.id); }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
       else out = 'ERR unknown op ' + c.op;
