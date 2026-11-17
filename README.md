@@ -16,19 +16,30 @@ A slider in the footer switches between a compact list, a two-per-row gallery of
 per row; brush tiles grow with it. Pack names drop marketing counts ("100 Watercolor ...") and show the real number
 of brushes. Tapping a brush loads its pack once and selects it with the Brush tool at a sensible size for its medium.
 
-**Rail**
+**Rail** (docks beside Photoshop's toolbar)
 
-- Brush, Wet paint (Mixer Brush), Smudge, Eraser. Eraser, smudge and wet paint use the brush you are painting with:
-  same tip, size, grain and dynamics.
-- Colour chip (Photoshop's picker) and recent colours.
-- Size and opacity faders. With Wet paint the second fader is **Wet**: dry = loaded paint, wet = a clean blender that
-  only moves paint already on the canvas (samples all layers).
-- Pressure: size, opacity. **Tilt**: the tip turns and flattens with pen tilt, like shading with the side of a pencil.
-- Media: **Paper** (grain that shows through, less where you press hard; brushes that bring their own grain keep it
-  and show "Paper: own"), **Wet** (wet edges), **Layer** (multiply, so strokes build up like marker or glaze).
-  Each medium switches the right ones on; your changes are remembered per brush.
-- Undo, redo, and **Impasto**: Photoshop's Oil Paint filter on a merged copy layer in Soft Light, so paint gets relief
-  and the paper stays clean. Hide or delete that layer to remove it.
+- Brush, Wet paint (Mixer Brush), Smudge, Eraser. Smudge and wet paint use the brush you are painting with; the
+  eraser is a plain round at the same size.
+- Colour chip (Photoshop's picker) and recent colours; size and opacity faders. With Wet paint the second fader is
+  **Wet**: dry = loaded paint, wet = a clean blender that only moves paint already on the canvas.
+- **Pen sends**: Pressure, Tilt, Rotation, Wheel, Direction, Fade, Button, Eraser. These switch what the pen sends,
+  for every brush; inputs your pen does not have are greyed out.
+- Media: **Paper** (grain; brushes with their own grain keep it), **Wet** (wet edges), **Layer** (multiply).
+- Undo, redo, and **Impasto**: Photoshop's Oil Paint filter on a merged copy layer in Soft Light.
+
+**Brush panel** (every pen-driven setting of the current brush)
+
+- **Feel** presets (pencil, fineliner, brush pen, chisel marker, calligraphy, charcoal, airbrush, the maker's
+  original) and your own saved feels; **Test stroke** paints a light, heavy, light stroke so you see the result.
+- **Pen controls**: size, opacity, flow, angle, roundness, grain depth, scatter, dab count and colour, each with what
+  drives it (pressure, tilt, direction, rotation, fade, stylus wheel), its random amount and its minimum. Simple shows
+  what the brush uses, All shows everything.
+- **Pressure curve** per brush (applied by the optional pen relay before Photoshop sees the pressure).
+- **Tip** (including bristle and erodible tip physics), **Brush pose** overrides, **Tool & paint** (opacity, flow,
+  mode, build-up, wet edges, noise, texture, smoothing, mixer wetness/load/mix).
+- **Save brush to Photoshop** stores the brush with all its settings in Photoshop's Brushes panel.
+
+`docs/brush-settings-reference.md` documents every setting, its descriptor key and how the pen drives it.
 
 ## Brush folder
 
