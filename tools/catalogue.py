@@ -33,16 +33,19 @@ for d in sorted(os.listdir(lib)):
             # full preset settings: exact names in file order + a pen profile per brush
             try: pres = abrdesc.presets(p)
             except Exception: pres = []
-            profs = {}
+            profs = {}; pn = None
             if pres:
                 pn = [abrdesc.clean_name(x.get('Nm', '')) for x in pres]
                 if len(set(pn)) == len(pn) and all(pn): nm = pn
                 for x, n2 in zip(pres, pn): profs[n2] = abrdesc.profile(x)
             real = [n for n in nm if not re.match(r'(?i)sampled brush \d+', n)]
             nm = real or nm
-            key = hashlib.md5(p.encode()).hexdigest()[:10]; tips = []
-            for i, im in enumerate(list(r['samples'].values())):
-                t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn)
+            key = hashlib.md5(p.encode()).hexdigest()[:10]; tips = []; by_uid = {}
+            for i, (uid, im) in enumerate(list(r['samples'].items())):
+                t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn); by_uid[uid] = fn
+            # one entry per brush: its own sampled tip (linked by id), None for round, bristle and erodible tips
+            if pres and nm == pn:
+                tips = [by_uid.get((x.get('Brsh') or {}).get('sampledData')) if isinstance(x.get('Brsh'), dict) else None for x in pres]
             files.append({'file': os.path.relpath(p, lib), 'version': r['version'], 'brushes': nm, 'count': max(len(nm), len(r['samples'])), 'tips': tips, 'pen': [profs.get(n2) for n2 in nm]})
     m = meta.get(d) or next((v for k, v in meta.items() if d.startswith(k) or k.startswith(d)), None)
     pj = os.path.join(pd, 'pack.json')   # a pack can describe itself: {title, author, description, tags}

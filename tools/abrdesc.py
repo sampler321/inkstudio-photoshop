@@ -89,7 +89,8 @@ def _pct(v): return v.get('value') if isinstance(v, dict) else v
 def profile(p):
     out = {'drives': {}, 'random': {}, 'tip': None, 'hidden': [], 'tool': None}
     b = p.get('Brsh', {}) if isinstance(p.get('Brsh'), dict) else {}
-    out['tip'] = {'sampledBrush': 'image', 'computedBrush': 'round', 'dBrush': 'bristle', 'dTips': 'erodible/airbrush'}.get(b.get('_class'), b.get('_class'))
+    out['tip'] = {'sampledBrush': 'image', 'computedBrush': 'round', 'dBrush': 'bristle', 'dTips': 'erodible'}.get(b.get('_class'), b.get('_class'))
+    if b.get('_class') == 'dTips' and b.get('dtipsType') == 1: out['tip'] = 'airbrush'   # dtipsType 0 erodible, 1 airbrush
     for sect in (p, p.get('dualBrush') if isinstance(p.get('dualBrush'), dict) else {}):
         for k, label in DYN.items():
             v = sect.get(k)
@@ -99,7 +100,8 @@ def profile(p):
             if (_pct(v.get('jitter')) or 0) > 0: out['random'][lab] = _pct(v.get('jitter'))
     if p.get('useTipDynamics') is False: out['drives'] = {c: [x for x in ls if x not in ('size', 'angle', 'roundness')] for c, ls in out['drives'].items()}
     if out['tip'] == 'bristle': out['hidden'].append('bristle physics: pressure and tilt spread the bristles (denser, wider, darker)')
-    if out['tip'] == 'erodible/airbrush': out['hidden'].append('erodible/airbrush tip: wears down or sprays differently with pressure and tilt')
+    if out['tip'] == 'erodible': out['hidden'].append('erodible tip: wears flat as you draw; pressure widens it')
+    if out['tip'] == 'airbrush': out['hidden'].append('airbrush tip: sprays; light pressure spreads widest, tilt stretches the spray')
     if p.get('useBrushPose') and p.get('overridePosePressure'): out['hidden'].append('brush pose overrides pen pressure with a fixed value (%s)' % _pct(p.get('brushPosePressure')))
     if p.get('useBrushPose') and (p.get('overridePoseTiltX') or p.get('overridePoseTiltY') or p.get('overridePoseAngle')): out['hidden'].append('brush pose overrides pen tilt/angle')
     if p.get('useColorDynamics'): out['hidden'].append('colour dynamics: hue/brightness vary %s' % ('per dab' if p.get('colorDynamicsPerTip') else 'per stroke'))

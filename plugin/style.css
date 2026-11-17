@@ -178,3 +178,5 @@ html, body { height: 100%; overflow: hidden; }
 .pair .b { width: 24px !important; margin-right: 2px; font-size: 13px; }
 .tipRow { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; width: 100%; margin-top: 2px; }
 .tipLab { font-size: 10px; color: var(--mut); margin: 0 6px 0 2px; }
+.cell { position: relative; }
+.noTip { position: absolute; left: 0; right: 0; top: 30%; text-align: center; color: #222; font-size: 22px; }

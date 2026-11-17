@@ -165,7 +165,7 @@ let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
 let tipF = null;   // tip-type filter: image, round, bristle, erodible/airbrush
 const tipOf = (f, i) => { const x = f.pen && f.pen[i]; return x && x.tip; };
-const TIP_FILTERS = [['image', 'Image'], ['round', 'Round'], ['bristle', 'Bristle'], ['erodible/airbrush', 'Erodible']];
+const TIP_FILTERS = [['image', 'Image'], ['round', 'Round'], ['bristle', 'Bristle'], ['erodible', 'Erodible'], ['airbrush', 'Airbrush']];
 let inspT = null, loadPressure = null;
 let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
@@ -425,9 +425,10 @@ function packBody(p) {
       if (tipF && tipOf(f, i) !== tipF) return;
       const cell = el('div', 'cell');
       const im = el('img', 'tip');
-      const tip = f.tips[Math.min(i, f.tips.length - 1)];
-      if (tip && i < f.tips.length) lazyImg(im, LIB.root + '/.inkstudio/' + tip); else im.classList.add('blank');
+      const own = f.tips[i];   // tips are per brush: none for round, bristle, erodible and airbrush tips
+      if (own) lazyImg(im, LIB.root + '/.inkstudio/' + own); else im.classList.add('blank');
       cell.appendChild(im);
+      if (!f.tips[i]) { const k = tipOf(f, i); cell.appendChild(el('div', 'noTip', k === 'round' ? '●' : (TIP_BADGE[k] || ''))); }
       cell.appendChild(el('div', 'name', b));
       { const tb = tipBadge(f, i); if (tb) cell.appendChild(el('span', 'tipBadge cellBadge', tb)); }
       cell.appendChild(star(key(p, f, b)));
@@ -467,7 +468,7 @@ async function loadPack(p, f, path) {
   store.set('owner', owner);
 }
 
-const TIP_BADGE = { bristle: 'Bristle', 'erodible/airbrush': 'Erodible' };
+const TIP_BADGE = { bristle: 'Bristle', erodible: 'Erodible', airbrush: 'Airbrush', 'erodible/airbrush': 'Erodible' };
 const tipBadge = (f, i) => { const pr = f.pen && f.pen[i]; return pr && TIP_BADGE[pr.tip]; };
 async function useBrush(p, f, b, cell) {
   document.querySelectorAll('.cell.sel, .srow.sel').forEach((c) => c.classList.remove('sel'));
@@ -521,7 +522,8 @@ const LINKS = [
   ['textureDepthDynamics', 'grain depth'], ['scatterDynamics', 'scatter'], ['countDynamics', 'dab count'], ['$clVr', 'colour'],
   ['$wtVr', 'wetness'], ['$mxVr', 'mix'],
 ];
-const TIP = { sampledBrush: 'image tip', computedBrush: 'round tip', dBrush: 'bristle tip', dTips: 'erodible / airbrush tip' };
+const TIP = { sampledBrush: 'image tip', computedBrush: 'round tip', dBrush: 'bristle tip', dTips: 'erodible tip', dTipsAir: 'airbrush tip' };
+const tipKind = (b) => (b && b._obj === 'dTips' && b.dtipsType === 1 ? 'dTipsAir' : b && b._obj);
 let inspOpen = store.get('inspOpen', false);
 function penProfile(o) {
   const rows = [];   // {control, what, key, on}
@@ -549,7 +551,7 @@ function penProfile(o) {
   if (o.mode && o.mode._value && o.mode._value !== 'normal') hidden.push('Blend mode ' + o.mode._value + '.');
   if (o.minimumDiameter && o.minimumDiameter._value > 0 && o.$szVr && o.$szVr.$bVTy) hidden.push('Never thinner than ' + Math.round(o.minimumDiameter._value) + '% of the size.');
   if (o.tiltScale && o.tiltScale._value && o.angleDynamics && o.angleDynamics.$bVTy === 3) hidden.push('Tilt scale ' + Math.round(o.tiltScale._value) + '%.');
-  return { rows, hidden, tip: TIP[b._obj] || b._obj, name: b.name };
+  return { rows, hidden, tip: TIP[tipKind(b)] || b._obj, name: b.name };
 }
 async function renderInspector() {
   const body = $('#inspBody'); if (!body) return;
@@ -561,7 +563,7 @@ async function renderInspector() {
   const pr = penProfile(o);
   body.innerHTML = '';
   body.appendChild(el('div', 'inspTip', pr.tip + (pr.name ? ', ' + pr.name : '')));
-  if (bpHelp && TIP_HELP[(o.brush || {})._obj]) body.appendChild(helpLine(TIP_HELP[(o.brush || {})._obj]));
+  if (bpHelp && TIP_HELP[tipKind(o.brush || {})]) body.appendChild(helpLine(TIP_HELP[tipKind(o.brush || {})]));
   const groups = {};
   pr.rows.forEach((r) => (groups[r.control] = groups[r.control] || []).push(r));
   if (!pr.rows.length) body.appendChild(el('div', 'inspNone', 'Nothing on this brush follows the pen.'));
@@ -697,7 +699,8 @@ const TIP_HELP = {
   sampledBrush: 'Image tip: a picture of a mark (charcoal grain, a bristle smear, a splatter) stamped along the stroke. Its look comes from the picture. Tune spacing for smoother or dottier strokes, angle and roundness to turn or squash it, and the pen controls for how it reacts.',
   computedBrush: 'Round tip: a simple mathematical circle, hard or soft. Clean and predictable. Hardness sets how soft the edge is; everything else comes from the pen controls.',
   dBrush: 'Bristle tip: Photoshop simulates individual bristles with physics. Pressing harder pushes more bristles onto the paper (wider, denser, darker) even with every pen control off. Tune bristles (count), length, thickness and stiffness; stiff short bristles give crisp strokes, soft long ones streaky paint. To stop pressure acting, use Brush pose and fix pressure.',
-  dTips: 'Erodible or airbrush tip: an erodible tip is a pencil or chalk point that wears flat as you draw (Sharpen in Photoshop restores it); pressure widens it. An airbrush tip sprays: light pressure spreads widest. Tune softness and shape (erodible) or granularity, splatter size and count (airbrush).',
+  dTips: 'Erodible tip: a pencil, chalk or crayon point that wears flat as you draw (Sharpen Tip in Photoshop restores it); pressure widens the contact. Tune softness (how fast it wears), shape and grid size.',
+  dTipsAir: 'Airbrush tip: a spray cone. Light pressure spreads widest, tilt stretches the spray. Tune hardness, distortion, granularity, spatter size and spatter amount.',
 };
 const CONTROL_HELP = {
   'Off': 'Not linked to the pen. Random and min still apply.',
@@ -869,8 +872,8 @@ async function renderBrushPanel() {
   // 3. tip
   if (bpOpen.tip === undefined || bpOpen._for !== b._obj) { bpOpen.tip = b._obj === 'dBrush' || b._obj === 'dTips'; bpOpen._for = b._obj; }
   if (o.useBrushPose) bpOpen.pose = true;
-  body.appendChild(section('tip', 'Tip: ' + (TIP[b._obj] || b._obj || ''), (sec) => {
-    if (bpHelp && TIP_HELP[b._obj]) sec.appendChild(helpLine(TIP_HELP[b._obj]));
+  body.appendChild(section('tip', 'Tip: ' + (TIP[tipKind(b)] || b._obj || ''), (sec) => {
+    if (bpHelp && TIP_HELP[tipKind(b)]) sec.appendChild(helpLine(TIP_HELP[tipKind(b)]));
     const skip = new Set(['_obj', 'name', 'sampledData', 'interfaceIconFrameDimmed', 'flipX', 'flipY']);
     Object.keys(b).filter((k) => !skip.has(k)).forEach((k) => {
       const v = b[k];
