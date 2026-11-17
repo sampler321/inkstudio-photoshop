@@ -34,7 +34,7 @@ of brushes. Tapping a brush loads its pack once and selects it with the Brush to
 - **Pen controls**: size, opacity, flow, angle, roundness, grain depth, scatter, dab count and colour, each with what
   drives it (pressure, tilt, direction, rotation, fade, stylus wheel), its random amount and its minimum. Simple shows
   what the brush uses, All shows everything.
-- **Pressure curve** per brush (applied by the optional pen relay before Photoshop sees the pressure).
+- **Pressure curve** per brush, applied by the optional pen relay [PenCast](https://github.com/sampler321/pencast) before Photoshop sees the pressure.
 - **Tip** (including bristle and erodible tip physics), **Brush pose** overrides, **Tool & paint** (opacity, flow,
   mode, build-up, wet edges, noise, texture, smoothing, mixer wetness/load/mix).
 - **Save brush to Photoshop** stores the brush with all its settings in Photoshop's Brushes panel.
