@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
+<body>
+<!-- Library panel -->
+<div id="library" class="panel">
+  <div class="top">
+    <input id="q" type="search" placeholder="Search brushes, packs, tags">
+    <div class="tabs" id="tabs">
+      <button data-tab="media" class="on">Media</button>
+      <button data-tab="fav">Favourites</button>
+      <button data-tab="recent">Recent</button>
+      <button data-tab="packs">Packs</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div id="list" class="list"></div>
+  <div id="empty" class="empty hidden">
+    <p>Choose the folder that holds your brushes. Each pack is a subfolder with .abr files.</p>
+    <button id="pick">Choose brush folder</button>
+  </div>
+  <div class="foot"><span id="status"></span><button id="settings" title="Brush folder">⚙</button></div>
+</div>
+<!-- Rail panel -->
+<div id="rail" class="panel rail">
+  <button class="tool" data-tool="paintbrushTool" title="Brush (B)">✎</button>
+  <button class="tool" data-tool="mixerBrushTool" title="Mixer brush (wet paint)">≈</button>
+  <button class="tool" data-tool="smudgeTool" title="Smudge">☁</button>
+  <button class="tool" data-tool="eraserTool" title="Eraser (E)">⌫</button>
+  <div class="sep"></div>
+  <button id="color" class="color" title="Colour"></button>
+  <div id="recentColors" class="recentColors"></div>
+  <div class="sep"></div>
+  <label>Size</label><input id="size" type="range" min="0" max="1000" value="400" orient="vertical" class="v">
+  <span id="sizeV" class="val"></span>
+  <label>Opacity</label><input id="opacity" type="range" min="1" max="100" value="100" class="v">
+  <span id="opV" class="val"></span>
+  <div class="sep"></div>
+  <button id="undo" title="Undo">↶</button>
+  <button id="redo" title="Redo">↷</button>
+</div>
+<script src="main.js"></script>
+</body>
+</html>

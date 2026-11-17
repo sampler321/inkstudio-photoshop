@@ -1,0 +1,4 @@
+# brushes are never part of this repo
+*.abr
+library/
+dist/
