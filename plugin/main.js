@@ -488,7 +488,14 @@ function initRail() {
     } catch (e) { log('tool', t, e); try { await ps_.tool(t); } catch (x) {} }
   });
   markTool('paintbrushTool');
-  ps_.tool('paintbrushTool').catch(() => {});   // always start on the brush (a leftover smudge/eraser looks like 'pen does nothing')
+  // always start on the brush (a leftover smudge/eraser/move tool looks like 'the pen does nothing'); selecting a
+  // tool needs an open document, so also do it when one is opened or created
+  ps_.tool('paintbrushTool').catch(() => {});
+  let brushOnOpen = true;
+  action.addNotificationListener(['open', 'make'], (ev, d) => {
+    if (!brushOnOpen || (d && d._target && d._target[0] && d._target[0]._ref && d._target[0]._ref !== 'document')) return;
+    brushOnOpen = false; ps_.tool('paintbrushTool').catch(() => { brushOnOpen = true; });
+  });
   const sizeV = $('#sizeV'), opV = $('#opV');
   const showSize = () => { sizeV.textContent = sliderToPx(size.value) + ' px'; };
   const size = vslider($('#size'), { min: 0, max: 1000, value: pxToSlider(120),

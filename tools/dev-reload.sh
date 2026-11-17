@@ -13,6 +13,7 @@ fi
 open -g -a "Adobe Photoshop 2026"
 until osascript -e 'tell application id "com.adobe.Photoshop" to do javascript "app.version"' >/dev/null 2>&1; do sleep 3; done
 while read -r f; do [ -n "$f" ] && osascript -e "tell application id \"com.adobe.Photoshop\" to do javascript \"app.open(new File('$f')); 1\"" >/dev/null; done < /tmp/inkstudio-docs.txt
+osascript -e 'tell application id "com.adobe.Photoshop" to do javascript "var r=new ActionReference(); r.putClass(stringIDToTypeID(\"paintbrushTool\")); var d=new ActionDescriptor(); d.putReference(charIDToTypeID(\"null\"),r); try{executeAction(stringIDToTypeID(\"select\"),d,DialogModes.NO)}catch(e){}; 1"' >/dev/null 2>&1
 osascript -e 'tell application id "com.adobe.Photoshop" to activate'
 sleep 3
 echo "v$v"; cat "$HOME/Library/Application Support/Adobe/UXP/PluginsStorage/PHSP/27/External/inkstudio.photoshop/PluginData/inkstudio.log"
