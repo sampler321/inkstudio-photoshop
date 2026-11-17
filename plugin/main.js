@@ -163,6 +163,9 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
+let tipF = null;   // tip-type filter: image, round, bristle, erodible/airbrush
+const tipOf = (f, i) => { const x = f.pen && f.pen[i]; return x && x.tip; };
+const TIP_FILTERS = [['image', 'Image'], ['round', 'Round'], ['bristle', 'Bristle'], ['erodible/airbrush', 'Erodible']];
 let inspT = null, loadPressure = null;
 let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
@@ -220,6 +223,7 @@ function visiblePacks() {
   if (!LIB) return [];
   let ps = LIB.packs;
   if (tab === 'media' && media) ps = ps.filter((p) => p.media.includes(media));
+  if (tab === 'media' && tipF) ps = ps.filter((p) => p.files.some((f) => (f.pen || []).some((x) => x && x.tip === tipF)));
   if (tab === 'fav') ps = ps.filter((p) => favs.has('pack:' + p.id) || p.files.some((f) => f.brushes.some((b) => favs.has(key(p, f, b)))));
   if (tab === 'recent') { const ids = recent.map((r) => r.pack); ps = ids.map((id) => LIB.packs.find((p) => p.id === id)).filter(Boolean).filter((p, i, a) => a.indexOf(p) === i); }
   if (query) {
@@ -322,6 +326,17 @@ function renderChips() {
     b.onclick = () => { media = media === n ? null : n; render(); };
     c.appendChild(b);
   });
+  // second row: tip type
+  const row = el('div', 'tipRow'); row.appendChild(el('span', 'tipLab', 'Tip'));
+  TIP_FILTERS.forEach(([id, label]) => {
+    let cnt = 0; LIB.packs.forEach((p) => p.files.forEach((f) => (f.pen || []).forEach((x) => { if (x && x.tip === id) cnt++; })));
+    if (!cnt) return;
+    const b = el('div', 'b chip' + (tipF === id ? ' on' : ''), label);
+    b.title = `${cnt} brushes`;
+    b.onclick = () => { tipF = tipF === id ? null : id; if (tipF) LIB.packs.forEach((p) => { if (p.files.some((f) => (f.pen || []).some((x) => x && x.tip === tipF)) && LIB.packs.filter((q) => q.files.some((f) => (f.pen || []).some((x) => x && x.tip === tipF))).length <= 3) open.add(p.id); }); render(); };
+    row.appendChild(b);
+  });
+  c.appendChild(row);
 }
 function star(k, onChange) {
   const s = el('div', 'b star' + (favs.has(k) ? ' on' : ''), favs.has(k) ? '★' : '☆');
@@ -369,6 +384,7 @@ function packBody(p) {
     body.appendChild(t);
   }
   p.files.forEach((f) => {
+    if (tipF && !(f.pen || []).some((x) => x && x.tip === tipF)) return;
     if (p.files.length > 1) body.appendChild(el('div', 'file', f.file.split('/').pop().replace(/\.abr$/i, '')));
     const names = f.brushes.length ? f.brushes : f.tips.map((_, i) => `Brush ${i + 1}`);
     // tip images show a brush best (the user's call); painted strokes only where there is no tip (computed brushes:
@@ -378,8 +394,9 @@ function packBody(p) {
       // Procreate-style rows: a real stroke rendered by Photoshop with this brush, name underneath
       const list = el('div', 'strokes');
       const LIMIT = 48;   // big packs (up to 500 brushes): show a first page, the rest on request
-      const shown = showAll.has(p.id + f.file) ? names : names.slice(0, LIMIT);
+      const shown = (showAll.has(p.id + f.file) || (tipF && tipF !== 'image')) ? names : names.slice(0, LIMIT);
       shown.forEach((b, i) => {
+        if (tipF && tipOf(f, i) !== tipF) return;
         const row = el('div', 'srow');
         const im = el('img', 'stroke');
         if (f.strokes[i]) lazyImg(im, LIB.root + '/.inkstudio/' + f.strokes[i]);
@@ -403,8 +420,9 @@ function packBody(p) {
       return;
     }
     const grid = el('div', 'grid');
-    const shownT = showAll.has(p.id + f.file) ? names : names.slice(0, 60);
+    const shownT = (showAll.has(p.id + f.file) || (tipF && tipF !== 'image')) ? names : names.slice(0, 60);
     shownT.forEach((b, i) => {
+      if (tipF && tipOf(f, i) !== tipF) return;
       const cell = el('div', 'cell');
       const im = el('img', 'tip');
       const tip = f.tips[Math.min(i, f.tips.length - 1)];

@@ -176,3 +176,5 @@ html, body { height: 100%; overflow: hidden; }
 .rail .sep { margin: 2px 0 4px; }
 .pair { display: flex; flex-direction: row; }
 .pair .b { width: 24px !important; margin-right: 2px; font-size: 13px; }
+.tipRow { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; width: 100%; margin-top: 2px; }
+.tipLab { font-size: 10px; color: var(--mut); margin: 0 6px 0 2px; }
