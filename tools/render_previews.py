@@ -19,6 +19,10 @@ def kind(p):   # stamps and effects look like their tip image; stroke brushes ne
     if 'stamp' in t or re.search(r'brush[- ]strokes|paint[- ]strokes?|strokes[- ]brushes', t): return 'stamp'   # big pictures of strokes
     if re.search(r'splatter|splash|stain|spray|drop|blot|texture|grunge|halftone|xresch|bokeh|effect', t): return 'effect'
     return 'stroke'
+if ids == ['notips']:   # every file that has brushes but no tip images: paint all of its brushes
+    PER = 100000
+    ids = [p['id'] for p in cat['packs'] if any(f['brushes'] and not f['tips'] and not f.get('strokes') for f in p['files'])]
+    print('to render (files without tips):', len(ids), 'packs', flush=True)
 if ids == ['strokes']:
     ids = [p['id'] for p in sorted(cat['packs'], key=lambda p: p['id']) if kind(p) == 'stroke' and not all(f.get('strokes') for f in p['files'])]
     print('to render (stroke brushes only):', len(ids), 'packs', flush=True)
@@ -34,6 +38,7 @@ for p in sorted(cat['packs'], key=lambda p: order.get(p['id'], 1e9)):
     if p['id'] not in ids: continue
     while WHEN_IDLE and idle_seconds() < 120: time.sleep(20)   # only while nobody is using the Mac
     for fi, f in enumerate(p['files']):
+        if PER >= 100000 and (f['tips'] or f.get('strokes')): continue
         out = os.path.join(inks, 'strokes', p['id'], str(fi)); os.makedirs(out, exist_ok=True)
         pre = f"var BRUSHES={js(f['brushes'][:PER])}; var OUT_DIR={js(out)}; "
         if not p.get('builtin'): pre += f"var LOAD_PATH={js(os.path.realpath(os.path.join(lib, f['file'])))}; "

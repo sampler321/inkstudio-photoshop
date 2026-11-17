@@ -25,17 +25,28 @@ def samples(b, sub, off, ln):
     while i + 4 < end:
         sz = struct.unpack('>I', b[i:i+4])[0]; i += 4; nxt = i + sz + ((4 - sz % 4) % 4)
         idl = b[i]; uid = b[i+1:i+1+idl].decode('latin1')
-        p = i + 1 + idl + (10 if sub == 1 else 8 + 256)  # skip to bounds (v6.1: 10 bytes, v6.2: 264)
-        try:
+        base = i + 1 + idl
+        # header position varies between writers (v6.1: +10, v6.2: +264, some v6.2 files: +8): take the first sane one
+        for off in ((10, 264, 8) if sub == 1 else (264, 8, 10)):
+            p = base + off
+            if p + 19 > nxt: continue
             t, l, bo, r = struct.unpack('>4i', b[p:p+16]); depth = struct.unpack('>H', b[p+16:p+18])[0]; comp = b[p+18]
-            w, h = r - l, bo - t; p += 19
-            if 0 < w < 10000 and 0 < h < 10000 and depth == 8:
-                if comp == 0: px = b[p:p+w*h]
+            w, h = r - l, bo - t
+            if 0 < w < 20000 and 0 < h < 20000 and depth in (8, 16) and comp in (0, 1): break
+        else:
+            i = nxt; continue
+        try:
+            p += 19
+            if True:
+                bpp = depth // 8; rowlen = w * bpp
+                if comp == 0: px = b[p:p+rowlen*h]
                 else:
                     p += 2 * h; px = bytearray()
                     for _ in range(h):
-                        row, p = packbits(b, p, w); px += row
-                out[uid] = Image.frombytes('L', (w, h), bytes(px[:w*h]).ljust(w*h, b'\0'))
+                        row, p = packbits(b, p, rowlen); px += row
+                px = bytes(px[:rowlen*h]).ljust(rowlen*h, b'\0')
+                if bpp == 2: px = px[0::2]   # 16-bit big-endian: keep the high byte
+                out[uid] = Image.frombytes('L', (w, h), px)
         except Exception: pass
         i = nxt
     return out
