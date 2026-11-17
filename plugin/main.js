@@ -589,6 +589,7 @@ async function devHook() {
       } else if (c.op === 'fx') { await setFx(c.fx); }
       else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
       else if (c.op === 'click') { const r = document.getElementById(c.id).onclick(); if (r && r.then) await r; }
+      else if (c.op === 'favs') { (c.add || []).forEach((k) => favs.add(k)); store.set('favs', [...favs]); render(); out = 'favs ' + favs.size; }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
       else out = 'ERR unknown op ' + c.op;
