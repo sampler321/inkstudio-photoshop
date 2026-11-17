@@ -33,7 +33,7 @@ for d in sorted(os.listdir(lib)):
             real = [n for n in nm if not re.match(r'(?i)sampled brush \d+', n)]
             nm = real or nm
             key = hashlib.md5(p.encode()).hexdigest()[:10]; tips = []
-            for i, im in enumerate(list(r['samples'].values())[:12]):
+            for i, im in enumerate(list(r['samples'].values())):
                 t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn)
             files.append({'file': os.path.relpath(p, lib), 'version': r['version'], 'brushes': nm, 'count': max(len(nm), len(r['samples'])), 'tips': tips})
     m = meta.get(d) or next((v for k, v in meta.items() if d.startswith(k) or k.startswith(d)), None)

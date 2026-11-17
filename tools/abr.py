@@ -25,7 +25,7 @@ def samples(b, sub, off, ln):
     while i + 4 < end:
         sz = struct.unpack('>I', b[i:i+4])[0]; i += 4; nxt = i + sz + ((4 - sz % 4) % 4)
         idl = b[i]; uid = b[i+1:i+1+idl].decode('latin1')
-        p = i + 1 + idl + (8 if sub == 1 else 8 + 256)  # skip to bounds
+        p = i + 1 + idl + (10 if sub == 1 else 8 + 256)  # skip to bounds (v6.1: 10 bytes, v6.2: 264)
         try:
             t, l, bo, r = struct.unpack('>4i', b[p:p+16]); depth = struct.unpack('>H', b[p+16:p+18])[0]; comp = b[p+18]
             w, h = r - l, bo - t; p += 19
