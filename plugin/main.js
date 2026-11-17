@@ -916,6 +916,7 @@ async function renderBrushPanel() {
           if (wet != null) { ch.wetness = Math.round(wet); ch.mix = Math.round(wet); }
           if (load != null) ch.dryness = Math.max(1, Math.round(load));
           ch.useTexture = false; ch.sampleAllLayers = !!all;
+          if (wet != null) ch.autoClean = wet < 20;   // dry presets lay clean paint; wet ones keep the dirty, mixing brush
         }
         return setOpt(ch, 'Oil paint').then(renderStrip);
       };
