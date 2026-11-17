@@ -10,8 +10,11 @@ Brushes are **not** included. Point the panel at your own folder of `.abr` packs
 **Brushes**: Media, Favourites, Recent and Packs tabs, filters by medium (pencil, ink and pen, marker, watercolour,
 gouache and acrylic, oil, charcoal and pastel, spray and splatter, texture and grain, stamps) and search across packs,
 makers, tags and brush names. Pack details stay collapsed until you open a pack: the maker's description, tags, and
-every brush as a real stroke rendered by Photoshop (or its tip image when no stroke preview exists yet).
-Tapping a brush loads its pack once and selects it with the Brush tool at a sensible size for its medium.
+every brush as its tip image (brushes without one, such as Photoshop's own computed brushes, show a stroke
+painted by Photoshop).
+A slider in the footer switches between a compact list, a two-per-row gallery of pack covers and one large cover
+per row; brush tiles grow with it. Pack names drop marketing counts ("100 Watercolor ...") and show the real number
+of brushes. Tapping a brush loads its pack once and selects it with the Brush tool at a sensible size for its medium.
 
 **Rail**
 
