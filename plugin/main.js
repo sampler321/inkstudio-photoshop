@@ -852,8 +852,8 @@ function initRail() {
       await ps_.toolOpts(patch, 'Pressure');
     } catch (e) { log('pressure', e); }
   };
-  pS.onclick = () => { prs.size = !prs.size; savePrs(); paintP(); applyP(); };
-  pO.onclick = () => { prs.opacity = !prs.opacity; savePrs(); paintP(); applyP(); };
+  pS.onclick = () => { prs.size = !pS.classList.contains('on'); savePrs(); paintP(); applyP().then(() => syncRail && syncRail()); };
+  pO.onclick = () => { prs.opacity = !pO.classList.contains('on'); savePrs(); paintP(); applyP().then(() => syncRail && syncRail()); };
   const pT = $('#pTilt');
   const paintT = () => pT.classList.toggle('on', !!prs.tilt);
   pT.onclick = () => { prs.tilt = !prs.tilt; savePrs(); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
@@ -910,6 +910,16 @@ function initRail() {
       const o = r[0] && r[0].currentToolOptions;
       if (o && o.brush && o.brush.diameter) { size.value = pxToSlider(o.brush.diameter._value); showSize(); }
       if (o && o.opacity != null && activeTool !== 'wetBrushTool') { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
+      // the switches show what the brush actually does right now (presets and the Brush panel can change it)
+      if (o) {
+        const on = (k, c) => o[k] && o[k].$bVTy === c;
+        $('#pSize').classList.toggle('on', on('$szVr', 2) || !!o.usePressureOverridesSize);
+        $('#pOpacity').classList.toggle('on', on('$opVr', 2) || on('$prVr', 2) || on('textureDepthDynamics', 2) || !!o.usePressureOverridesOpacity);
+        $('#pTilt').classList.toggle('on', on('angleDynamics', 3) || on('roundnessDynamics', 3));
+        $('#fxWet').classList.toggle('on', !!o.wetEdges);
+        $('#fxLayer').classList.toggle('on', !!(o.mode && o.mode._value === 'multiply'));
+        if (!o.useTexture) { $('#fxPaper').classList.remove('on'); $('#fxPaper').classList.remove('own'); }
+      }
     } catch (e) {}
   };
   action.addNotificationListener(['set', 'select'], () => { syncRail(); clearTimeout(inspT); inspT = setTimeout(() => { renderInspector(); renderBrushPanel(); }, 250); });
