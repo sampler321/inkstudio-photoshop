@@ -265,6 +265,10 @@ function packRow(p) {
   const firstTip = (p.files.find((f) => f.tips && f.tips.length) || {}).tips;
   if (p.covers && p.covers[0]) lazyImg(thumb, LIB.root + '/.inkstudio/' + p.covers[0]);
   else if (firstTip) { lazyImg(thumb, LIB.root + '/.inkstudio/' + firstTip[0]); thumb.classList.add('tipCover'); }   // no Envato cover: the first brush
+  else {   // computed brushes (Photoshop's own): the first painted stroke
+    const st = (p.files.find((f) => f.strokes && f.strokes.some(Boolean)) || {}).strokes;
+    if (st) { lazyImg(thumb, LIB.root + '/.inkstudio/' + st.find(Boolean)); thumb.classList.add('tipCover'); }
+  }
   const meta = el('div', 'meta');
   meta.appendChild(el('div', 'title', p.name));
   meta.title = p.title;
