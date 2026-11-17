@@ -201,7 +201,7 @@ async function loadLibrary(root) {
     LIB = { root, packs: cat.packs.filter((p) => p.count > 0) };
     store.set('root', root);
     const n = LIB.packs.reduce((a, p) => a + p.count, 0);
-    status(`${LIB.packs.length} packs · ${n.toLocaleString()} brushes`);
+    status(`${LIB.packs.length} packs, ${n.toLocaleString()} brushes`);
   } catch (e) {
     LIB = null;
     status('No catalogue in that folder. Run tools/catalogue.py on it.');
@@ -260,7 +260,10 @@ function packRow(p) {
   if (p.covers && p.covers[0]) lazyImg(thumb, LIB.root + '/.inkstudio/' + p.covers[0]);
   const meta = el('div', 'meta');
   meta.appendChild(el('div', 'title', p.title));
-  meta.appendChild(el('div', 'sub', `${p.author || 'Unknown maker'} · ${p.count}`));
+  const sub = el('div', 'sub');
+  sub.appendChild(el('span', 'maker', p.author || 'Unknown maker'));
+  sub.appendChild(el('span', 'count', `${p.count} brushes`));
+  meta.appendChild(sub);
   head.appendChild(thumb); head.appendChild(meta); head.appendChild(star('pack:' + p.id));
   head.onclick = () => { open.has(p.id) ? open.delete(p.id) : open.add(p.id); row.replaceWith(packRow(p)); };
   row.appendChild(head);
@@ -269,7 +272,7 @@ function packRow(p) {
 }
 function packBody(p) {
   const body = el('div', 'body');
-  if (p.media.length) body.appendChild(el('div', 'mediaLine', p.media.join(' · ')));
+  if (p.media.length) { const ml = el('div', 'mediaLine'); p.media.forEach((m) => ml.appendChild(el('span', 'medium', m))); body.appendChild(ml); }
   // Envato's own description, collapsed to a few lines until asked
   if (p.description) {
     const d = el('div', 'desc clamp', p.description.replace(/[*_#>]+/g, '').replace(/\n{2,}/g, '\n').trim());
@@ -285,7 +288,10 @@ function packBody(p) {
   p.files.forEach((f) => {
     if (p.files.length > 1) body.appendChild(el('div', 'file', f.file.split('/').pop().replace(/\.abr$/i, '')));
     const names = f.brushes.length ? f.brushes : f.tips.map((_, i) => `Brush ${i + 1}`);
-    if (f.strokes && f.strokes.some(Boolean)) {
+    // tip images show a brush best (the user's call); painted strokes only where there is no tip (computed brushes:
+    // Photoshop's own, bristle tips)
+    const useStrokes = f.strokes && f.strokes.some(Boolean) && (!f.tips.length || p.author === 'Adobe');
+    if (useStrokes) {
       // Procreate-style rows: a real stroke rendered by Photoshop with this brush, name underneath
       const list = el('div', 'strokes');
       const LIMIT = 48;   // big packs (up to 500 brushes): show a first page, the rest on request
@@ -391,7 +397,7 @@ async function useBrush(p, f, b, cell) {
     activeTool = 'paintbrushTool';
     document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
-    status(b + ' · ' + px + ' px');
+    status(`${b}, ${px} px`);
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
     store.set('recent', recent);
   } catch (e) { status('Could not select: ' + (e.message || e)); log('useBrush', b, e); throw e; }
