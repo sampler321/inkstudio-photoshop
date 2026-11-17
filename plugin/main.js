@@ -896,6 +896,59 @@ async function renderBrushPanel() {
     if ('flipY' in o) sec.appendChild(kv('Flip Y', tog(!!o.flipY, (x) => setOpt({ flipY: x, useTipDynamics: true })), 'Mirrors dabs top to bottom at random.'));
     if (b.spacing && typeof b.spacing === 'object') sec.appendChild(kv('Spacing %', num(b.spacing._value, (x) => setOpt({ brush: Object.assign({}, b, { spacing: { _unit: b.spacing._unit || 'percentUnit', _value: Math.max(1, x) } }) }, 'Spacing')), 'Gap between dabs. Low = dabs blend into one texture and repeats show less.'));
   }));
+  // 1c. oil paint: the few things that decide how bristle paint behaves, as four plain controls and presets
+  if ((b._obj === 'dBrush' || 'wetness' in o)) {
+    if (bpOpen.oil === undefined) bpOpen.oil = true;
+    body.appendChild(section('oil', 'Oil paint', (sec) => {
+      if (bpHelp) sec.appendChild(helpLine('Four controls for painterly brushes. Coverage: how solid the stroke is. Streaks: how visible the bristle lines are. Wetness: how much it blends with paint already there. Paint load: how long the stroke lasts before it runs dry.'));
+      const fr = (k, d) => { const v = b[k]; return v && typeof v === 'object' ? v._value : d; };
+      const F = (x) => ({ _unit: 'percentUnit', _value: x });
+      const isBristle = b._obj === 'dBrush', isMixer = 'wetness' in o;
+      const set = ({ cov, str, wet, load, all }) => {
+        const ch = {};
+        if (isBristle) {
+          const nb = Object.assign({}, b);
+          if (cov != null) { nb.density = F(0.1 + 0.85 * cov / 100); nb.thickness = F(0.05 + 0.6 * cov / 100); }
+          if (str != null) { nb.clumping = F(0.6 * str / 100); nb.length = F(0.5 + 0.9 * str / 100); }
+          ch.brush = nb;
+        }
+        if (isMixer) {
+          if (wet != null) { ch.wetness = Math.round(wet); ch.mix = Math.round(wet); }
+          if (load != null) ch.dryness = Math.max(1, Math.round(load));
+          ch.useTexture = false; ch.sampleAllLayers = !!all;
+        }
+        return setOpt(ch, 'Oil paint').then(renderStrip);
+      };
+      const OV = [   // [id, name, what it feels like, values]
+        ['natural', 'Natural oil', 'Even strokes, soft streaks', { cov: 55, str: 35, wet: 8, load: 90 }],
+        ['thick', 'Thick paint', 'Solid, opaque, few streaks', { cov: 90, str: 10, wet: 0, load: 100 }],
+        ['dry', 'Dry brush', 'Scratchy, broken, paper shows', { cov: 30, str: 60, wet: 0, load: 35 }],
+        ['streaky', 'Streaky', 'Strong bristle lines', { cov: 45, str: 80, wet: 5, load: 90 }],
+        ['wetblend', 'Wet blend', 'Soft edges into the paint around', { cov: 60, str: 30, wet: 40, load: 60 }],
+        ['blend', 'Blender', 'Moves paint, adds almost none', { cov: 70, str: 20, wet: 70, load: 5, all: true }]];
+      const grid = el('div', 'oilGrid');
+      OV.forEach(([id, name, hint, v]) => {
+        const t = el('div', 'b oilTile'); t.appendChild(el('div', 'oilName', name)); t.appendChild(el('div', 'oilHint', hint));
+        t.onclick = () => set(v); grid.appendChild(t);
+      });
+      sec.appendChild(grid);
+      const slider = (label, lo, hi, value, onSet, help) => {
+        const w = el('div', 'oilSl'); w.appendChild(el('div', 'oilLab', label));
+        const row = el('div', 'oilRow'); row.appendChild(el('span', 'oilEnd', lo));
+        const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = 100; r.value = Math.max(0, Math.min(100, value || 0)); r.className = 'oilRange';
+        r.addEventListener('change', () => onSet(+r.value)); row.appendChild(r); row.appendChild(el('span', 'oilEnd', hi));
+        w.appendChild(row); if (bpHelp && help) w.appendChild(helpLine(help)); sec.appendChild(w);
+      };
+      if (isBristle) {
+        slider('Coverage', 'lines', 'solid', Math.round((fr('density', 0.5) - 0.1) / 0.85 * 100), (x) => set({ cov: x }), 'Low: a few bristle lines. High: one solid body of paint.');
+        slider('Streaks', 'smooth', 'streaky', Math.round(fr('clumping', 0.3) / 0.6 * 100), (x) => set({ str: x }), 'How strongly the bristles show as separate lines.');
+      }
+      if (isMixer) {
+        slider('Wetness', 'pure paint', 'blends', o.wetness, (x) => set({ wet: x }), 'Wet paint mixes with what is already on this layer (black turns grey over white).');
+        slider('Paint load', 'runs dry', 'full', o.dryness, (x) => set({ load: Math.max(1, x) }), 'How long a stroke lasts before the brush runs dry.');
+      } else sec.appendChild(el('div', 'bpNote', 'Wetness and paint load need the Mixer Brush: tap the wave button on the rail.'));
+    }));
+  }
   // 2. pressure curve (applied by the pen relay before Photoshop sees the pressure; per brush)
   body.appendChild(section('curve', 'Pressure curve', (sec) => buildCurve(sec)));
   // 3. tip
