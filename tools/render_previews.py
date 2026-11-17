@@ -12,7 +12,7 @@ for p in cat['packs']:
     for fi, f in enumerate(p['files']):
         out = os.path.join(inks, 'strokes', p['id'], str(fi)); os.makedirs(out, exist_ok=True)
         pre = f"var BRUSHES={js(f['brushes'])}; var OUT_DIR={js(out)}; "
-        if not p.get('builtin'): pre += f"app.load(new File({js(os.path.join(lib, f['file']))})); "
+        if not p.get('builtin'): pre += f"app.load(new File({js(os.path.realpath(os.path.join(lib, f['file'])))})); "
         script = 'with timeout of 3600 seconds\ntell application id "com.adobe.Photoshop" to do javascript ' + js(pre) + ' & (read POSIX file ' + js(jsx) + ')\nend timeout'
         r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
         print(p['id'], fi, (r.stdout or r.stderr).strip()[:300], flush=True)
