@@ -58,6 +58,19 @@ const ps_ = {
     });
   },
   async opacity(pct) { await ps_.toolOpts({ opacity: pct }, 'Opacity'); },
+  // give eraser / smudge / mixer the painting brush: copy its tip, dynamics and grain into that tool's options
+  async carryBrush(tool) {
+    const get = () => action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {}).then((r) => (r[0] && r[0].currentToolOptions) || {});
+    await modal('Carry brush', async () => {
+      await action.batchPlay([{ _obj: 'select', _target: [{ _ref: 'paintbrushTool' }] }], {});
+      const src = await get();
+      await action.batchPlay([{ _obj: 'select', _target: [{ _ref: tool }] }], {});
+      const dst = await get();
+      const skip = new Set(['_obj', 'mode', 'opacity', 'flow', 'foregroundColor']);
+      Object.keys(src).forEach((k) => { if (!skip.has(k) && k in dst) dst[k] = src[k]; });
+      await action.batchPlay([{ _obj: 'set', _target: [{ _ref: tool }], to: Object.assign(dst, { _obj: 'currentToolOptions' }) }], {});
+    });
+  },
   async step(dir) {
     await play([{ _obj: 'select', _target: [{ _ref: 'historyState', _enum: 'ordinal', _value: dir }] }], dir === 'previous' ? 'Undo' : 'Redo');
   },
@@ -104,11 +117,18 @@ const MEDIUM_FX = {   // paper: texture mode + depth tuned by test strokes (subt
 function fxPatch(fx) {
   const p = { wetEdges: !!fx.wet, mode: { _enum: 'blendMode', _value: fx.layer ? 'multiply' : 'normal' } };
   if (!fx.own) p.useTexture = !!fx.paper;   // a brush with its own grain keeps it unless paper is switched on explicitly
+  const nat = (currentBrush && currentBrush.native) || {};
+  if (fx.tilt) Object.assign(p, {   // pen tilt turns and flattens the tip, like shading with the side of a pencil
+    useTipDynamics: true,
+    angleDynamics: { _obj: '$brVr', $bVTy: 3, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 0 } },
+    roundnessDynamics: { _obj: '$brVr', $bVTy: 3, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 30 } },
+  });
+  else if (nat.angleDynamics) Object.assign(p, { useTipDynamics: !!nat.useTipDynamics, angleDynamics: nat.angleDynamics, roundnessDynamics: nat.roundnessDynamics });
   if (fx.paper) Object.assign(p, {
     useTexture: true, invertTexture: false,
     texture: { _obj: 'pattern', name: 'InkStudio Paper' }, textureScale: { _unit: 'percentUnit', _value: 100 }, textureBlendMode: { _enum: 'blendMode', _value: (fx.grain || ['subtract'])[0] },
     textureDepth: { _unit: 'percentUnit', _value: (fx.grain || [0, 80])[1] }, minimumDepth: { _unit: 'percentUnit', _value: 15 },
-    textureDepthDynamics: { _obj: 'brVr', bVTy: 2, fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 15 } },
+    textureDepthDynamics: { _obj: '$brVr', $bVTy: 2, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 15 } },
   });
   return p;
 }
@@ -139,7 +159,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
-let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null;
+let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
 
 function packMedia(p) {
@@ -300,13 +320,15 @@ async function useBrush(p, f, b, cell) {
     await ps_.size(px);
     applyPressure && await applyPressure();
     const native = await nativeOptions();
+    currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics } };
     const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {});
     if (native.useTexture) { fx.paper = false; fx.own = true; }       // maker's grain wins
     if (native.wetEdges) fx.wet = true;
+    fx.tilt = !!store.get('pressure', {}).tilt;
     Object.assign(fx, store.get('fx', {})[key(p, f, b)] || {});
     setFx && await setFx(fx);
     lastBrushKey = key(p, f, b);
-    currentBrush = { name: b, px }; activeTool = 'paintbrushTool';
+    activeTool = 'paintbrushTool';
     document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
     status(b + ' · ' + px + ' px');
@@ -367,11 +389,8 @@ function initRail() {
   tools.forEach((b) => b.onclick = async () => {
     const t = b.dataset.tool; markTool(t); activeTool = t;
     try {
-      if (currentBrush) {
-        await ps_.brush(currentBrush.name, t);
-        await ps_.size(currentBrush.px || sliderToPx(size.value));
-        applyPressure && await applyPressure();
-      } else await ps_.tool(t);
+      if (t === 'paintbrushTool') await ps_.tool(t);
+      else await ps_.carryBrush(t);
       if (t === 'wetBrushTool') { const w = store.get('wet', 50); await ps_.toolOpts(wetOpts(w), 'Wet'); op.value = w; opV.textContent = 'Wet ' + w + '%'; }
       else if (syncRail) syncRail();
     } catch (e) { log('tool', t, e); try { await ps_.tool(t); } catch (x) {} }
@@ -401,9 +420,13 @@ function initRail() {
   const applyP = () => ps_.toolOpts({ usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity }, 'Pressure').catch((e) => log('pressure', e));
   pS.onclick = () => { prs.size = !prs.size; store.set('pressure', prs); paintP(); applyP(); };
   pO.onclick = () => { prs.opacity = !prs.opacity; store.set('pressure', prs); paintP(); applyP(); };
-  paintP();
+  const pT = $('#pTilt');
+  const paintT = () => pT.classList.toggle('on', !!prs.tilt);
+  pT.onclick = () => { prs.tilt = !prs.tilt; store.set('pressure', prs); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
+  paintP(); paintT();
   applyPressure = applyP;
   let fxNow = { paper: false, wet: false, layer: false };
+  fxNowRef = () => fxNow;
   const fxEls = { paper: $('#fxPaper'), wet: $('#fxWet'), layer: $('#fxLayer') };
   const paintFx = () => {
     Object.keys(fxEls).forEach((k) => fxEls[k].classList.toggle('on', !!fxNow[k]));
@@ -417,7 +440,7 @@ function initRail() {
   };
   Object.keys(fxEls).forEach((k) => fxEls[k].onclick = async () => {
     const fx = Object.assign({}, fxNow, { [k]: !fxNow[k] });
-    if (lastBrushKey) { const m = store.get('fx', {}); m[lastBrushKey] = { paper: fx.paper, wet: fx.wet, layer: fx.layer }; store.set('fx', m); }   // remembered per brush
+    if (lastBrushKey) { const m = store.get('fx', {}); m[lastBrushKey] = { paper: fx.paper, wet: fx.wet, layer: fx.layer }; store.set('fx', m); }   // remembered per brush (tilt is a pen setting)
     if (k === 'paper' && fxNow.paper && fxNow.own && currentBrush) {
       // back to the maker's grain: re-select the preset, then re-apply size and pressure
       try { await ps_.brush(currentBrush.name, await currentTool()); await ps_.size(currentBrush.px); applyPressure && await applyPressure(); } catch (e) { log('restore grain', e); }
@@ -462,6 +485,7 @@ async function devHook() {
         const p = LIB.packs.find((x) => x.id === c.pack); const fl = p.files[c.file || 0];
         await useBrush(p, fl, c.brush || fl.brushes[0], null);
       } else if (c.op === 'fx') { await setFx(c.fx); }
+      else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
     } catch (e) { out = 'ERR ' + (e.stack || e); }
     const o = await d.createFile('cmd.out', { overwrite: true }); await o.write(out + '\n' + LOG.slice(-5).join('\n'));
