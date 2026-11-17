@@ -11,6 +11,14 @@ def idle_seconds():
 inks = os.path.join(lib, '.inkstudio'); catp = os.path.join(inks, 'catalog.json')
 jsx = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jsx', 'render-strokes.jsx')
 cat = json.load(open(catp))
+def kind(p):   # stamps and effects look like their tip image; stroke brushes need a painted preview
+    t = (p['title'] + ' ' + p['id']).lower()
+    if 'stamp' in t: return 'stamp'
+    if re.search(r'splatter|splash|stain|spray|drop|blot|texture|grunge|halftone|xresch|bokeh|effect', t): return 'effect'
+    return 'stroke'
+if ids == ['strokes']:
+    ids = [p['id'] for p in sorted(cat['packs'], key=lambda p: p['id']) if kind(p) == 'stroke' and not all(f.get('strokes') for f in p['files'])]
+    print('to render (stroke brushes only):', len(ids), 'packs', flush=True)
 if ids == ['all']:   # drawing media first, stamps last, skip packs that already have previews
     def rank(p):
         t = (p['title'] + ' ' + p['id']).lower()
