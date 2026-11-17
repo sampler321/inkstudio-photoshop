@@ -324,7 +324,9 @@ function packBody(p) {
         else if (f.tips[i]) { lazyImg(im, LIB.root + '/.inkstudio/' + f.tips[i]); im.classList.add('tipOnly'); }   // no painted preview yet: show the tip
         else im.classList.add('blank');
         row.appendChild(im);
-        const line = el('div', 'sline'); line.appendChild(el('div', 'name', b)); line.appendChild(star(key(p, f, b)));
+        const line = el('div', 'sline'); line.appendChild(el('div', 'name', b));
+        const tb = tipBadge(f, i); if (tb) line.appendChild(el('span', 'tipBadge', tb));
+        line.appendChild(star(key(p, f, b)));
         row.appendChild(line);
         row.title = b;
         row.onclick = () => useBrush(p, f, b, row).catch(() => {});
@@ -347,6 +349,7 @@ function packBody(p) {
       if (tip && i < f.tips.length) lazyImg(im, LIB.root + '/.inkstudio/' + tip); else im.classList.add('blank');
       cell.appendChild(im);
       cell.appendChild(el('div', 'name', b));
+      { const tb = tipBadge(f, i); if (tb) cell.appendChild(el('span', 'tipBadge cellBadge', tb)); }
       cell.appendChild(star(key(p, f, b)));
       cell.title = b;
       cell.onclick = () => useBrush(p, f, b, cell).catch(() => {});
@@ -384,6 +387,8 @@ async function loadPack(p, f, path) {
   store.set('owner', owner);
 }
 
+const TIP_BADGE = { bristle: 'Bristle', 'erodible/airbrush': 'Erodible' };
+const tipBadge = (f, i) => { const pr = f.pen && f.pen[i]; return pr && TIP_BADGE[pr.tip]; };
 async function useBrush(p, f, b, cell) {
   document.querySelectorAll('.cell.sel, .srow.sel').forEach((c) => c.classList.remove('sel'));
   cell && cell.classList.add('sel');
