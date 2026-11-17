@@ -268,12 +268,11 @@ function initLibrary() {
   let t; $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { query = e.target.value.trim(); render(); }, 150); });
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
+  // <plugin data>/library.txt (if present) names the brush folder; otherwise the last folder picked
   const root = store.get('root', null);
-  if (root) return loadLibrary(root);
-  // fallback: <plugin data>/library.txt holds a default brush folder path
   lfs.getDataFolder().then((d) => d.getEntry('library.txt')).then((f) => f.read())
-    .then((p) => { p = p.trim(); if (p) loadLibrary(p); else render(); })
-    .catch(() => render());
+    .then((p) => { p = p.trim(); if (p) loadLibrary(p); else if (root) loadLibrary(root); else render(); })
+    .catch(() => { if (root) loadLibrary(root); else render(); });
 }
 
 /* ---------- rail ---------- */

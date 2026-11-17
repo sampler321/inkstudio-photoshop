@@ -33,14 +33,18 @@ for d in sorted(os.listdir(lib)):
                 t = ImageOps.invert(im); t.thumbnail((96, 96)); fn = f'tips/{key}_{i}.png'; t.save(f'{out}/{fn}', optimize=True); tips.append(fn)
             files.append({'file': os.path.relpath(p, lib), 'version': r['version'], 'brushes': nm, 'count': max(len(nm), len(r['samples'])), 'tips': tips})
     m = meta.get(d) or next((v for k, v in meta.items() if d.startswith(k) or k.startswith(d)), None)
+    pj = os.path.join(pd, 'pack.json')   # a pack can describe itself: {title, author, description, tags}
+    if os.path.exists(pj):
+        try: m = {**(m or {'id': None}), **json.load(open(pj))}
+        except Exception: pass
     covers = []
     if m and cov:
         for i in range(4):
-            src = f"{cov}/{m['id']}_{i}.jpg"
+            src = f"{cov}/{m.get('id')}_{i}.jpg"
             if os.path.exists(src):
                 im = Image.open(src).convert('RGB'); im.thumbnail((480, 320)); fn = f"covers/{d}_{i}.jpg"; im.save(f'{out}/{fn}', quality=82); covers.append(fn)
-    packs.append({'covers': covers, 'id': d, 'title': m['title'] if m else d.replace('-', ' ').title(), 'author': m and m['author'],
-                  'description': m and m['description'], 'tags': m and m['tags'], 'envato': m and m['id'],
+    packs.append({'covers': covers, 'id': d, 'title': (m.get('title') if m else None) or d.replace('-', ' ').title(), 'author': m and m.get('author'),
+                  'description': m and m.get('description'), 'tags': m and m.get('tags'), 'envato': m and m.get('id'),
                   'files': files, 'count': sum(f['count'] for f in files)})
     print(d, packs[-1]['count'], 'meta' if m else 'NOMETA', flush=True)
 json.dump({'packs': packs}, open(f'{out}/catalog.json', 'w'), indent=1)
