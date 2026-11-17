@@ -404,9 +404,9 @@ async function useBrush(p, f, b, cell) {
     const med = MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {};
     const px = sizes[key(p, f, b)] || med.px || 120;
     await ps_.size(px);
+    const native = await nativeOptions();   // the maker's settings, read before any switch touches them
+    currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics, $szVr: native.$szVr, $opVr: native.$opVr, $prVr: native.$prVr, textureDepthDynamics: native.textureDepthDynamics } };
     applyPressure && await applyPressure();
-    const native = await nativeOptions();
-    currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics } };
     const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {});
     if (native.useTexture) { fx.paper = false; fx.own = true; }       // maker's grain wins
     if (native.wetEdges) fx.wet = true;
@@ -515,11 +515,14 @@ function initRail() {
   const applyP = async () => {
     try {
       const cur = await nativeOptions();
+      const nat = (currentBrush && currentBrush.native) || {};
+      const PRESS = Object.assign({}, OFF, { $bVTy: 2 });
+      // on = the maker's own pressure settings (pressure added only where the brush had none); off = silent
+      const set = (k, on) => { if (!(k in cur)) return; patch[k] = !on ? OFF : (nat[k] && nat[k].$bVTy ? nat[k] : PRESS); };
       const patch = { usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity };
-      if (!prs.size && '$szVr' in cur) patch.$szVr = OFF;
-      // Opacity switch drives opacity, flow and grain depth together: off = all silent, on = all follow pressure
-      if (!prs.opacity) ['$opVr', '$prVr', 'textureDepthDynamics'].forEach((k) => { if (k in cur) patch[k] = OFF; });
-      else if (cur.useTexture && 'textureDepthDynamics' in cur) patch.textureDepthDynamics = Object.assign({}, OFF, { $bVTy: 2 });
+      set('$szVr', prs.size);
+      set('$opVr', prs.opacity); set('$prVr', prs.opacity);   // opacity switch: opacity, flow
+      if (cur.useTexture) set('textureDepthDynamics', prs.opacity);   // ...and grain depth
       await ps_.toolOpts(patch, 'Pressure');
     } catch (e) { log('pressure', e); }
   };
