@@ -7,7 +7,7 @@ Brushes are **not** included. Point the panel at your own folder of `.abr` packs
 
 ## The panel
 
-**Brushes**: Media, Favourites, Recent and Packs tabs, filters by medium (pencil, ink and pen, marker, watercolour,
+**Brushes**: Packs, Favourites, Recent and Mine tabs (Mine = brushes you saved), filters by medium (pencil, ink and pen, marker, watercolour,
 gouache and acrylic, oil, charcoal and pastel, spray and splatter, texture and grain, stamps) and search across packs,
 makers, tags and brush names. Pack details stay collapsed until you open a pack: the maker's description, tags, and
 every brush as its tip image (brushes without one, such as Photoshop's own computed brushes, show a stroke

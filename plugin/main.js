@@ -232,6 +232,7 @@ const key = (p, f, b) => `b:${p.id}/${f.file}/${b}`;
 
 function render() {
   const list = $('#list'); if (!list) return;
+  if (tab === 'mine') return renderMine(list);
   $('#empty').classList.toggle('hidden', !!LIB);
   list.classList.toggle('hidden', !LIB);
   renderChips();
@@ -248,6 +249,36 @@ function render() {
     row.appendChild(packRow(p));
   });
 }
+
+/* Mine: brushes you saved to Photoshop, shown with the preview of the brush they came from */
+function renderMine(list) {
+  $('#empty').classList.add('hidden'); list.classList.remove('hidden'); renderChips();
+  list.innerHTML = '';
+  const mine = store.get('myBrushes', []);
+  if (!mine.length) { list.appendChild(el('div', 'none', 'Brushes you save with "Save brush" in the Brush panel appear here.')); return; }
+  const grid = el('div', 'grid');
+  mine.slice().reverse().forEach((m) => {
+    const cell = el('div', 'cell');
+    const im = el('img', 'tip');
+    if (m.preview && LIB) lazyImg(im, LIB.root + '/.inkstudio/' + m.preview); else im.classList.add('blank');
+    cell.appendChild(im); cell.appendChild(el('div', 'name', m.name));
+    const del = el('div', 'b star', '×'); del.title = 'Delete this brush';
+    del.onclick = async (ev) => {
+      ev.stopPropagation();
+      await play([{ _obj: 'delete', _target: [{ _ref: 'brush', _name: m.name }] }], 'Delete brush').catch(() => {});
+      store.set('myBrushes', store.get('myBrushes', []).filter((x) => x.name !== m.name)); render();
+    };
+    cell.appendChild(del);
+    cell.onclick = async () => {
+      document.querySelectorAll('.cell.sel').forEach((c) => c.classList.remove('sel')); cell.classList.add('sel');
+      try { await ps_.brush(m.name, m.tool || 'paintbrushTool'); currentBrush = { name: m.name, px: m.px, native: {} }; status(m.name); renderBrushPanel(); }
+      catch (e) { status('Not in Photoshop any more: ' + m.name); }
+    };
+    grid.appendChild(cell);
+  });
+  list.appendChild(grid);
+}
+
 function renderChips() {
   const c = $('#chips'); c.innerHTML = '';
   c.classList.toggle('hidden', tab !== 'media' || !LIB);
@@ -303,7 +334,7 @@ function packBody(p) {
   }
   if (p.tags && p.tags.length) {
     const t = el('div', 'tags');
-    p.tags.slice(0, 12).forEach((tg) => { const b = el('div', 'b tag', tg); b.onclick = () => { query = tg; $('#q').value = tg; tab = 'packs'; setTab(); render(); }; t.appendChild(b); });
+    p.tags.slice(0, 12).forEach((tg) => { const b = el('div', 'b tag', tg); b.onclick = () => { query = tg; $('#q').value = tg; tab = 'media'; media = null; setTab(); render(); }; t.appendChild(b); });
     body.appendChild(t);
   }
   p.files.forEach((f) => {
@@ -570,7 +601,18 @@ function deleteFeel(id) { const mine = store.get('myFeels', {}); delete mine[id]
 async function saveBrushToPhotoshop(name) {
   // Photoshop's "New Brush Preset" from the current tool settings
   await play([{ _obj: 'make', _target: [{ _ref: 'brush' }], name, using: { _ref: [{ _ref: 'property', _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] } }], 'Save brush')
-    .then(() => status('Saved "' + name + '" to Photoshop\'s Brushes panel'))
+    .then(() => {
+      // remember it for the Mine tab, with the preview of the brush it came from
+      const src = recent[0] && LIB && LIB.packs.find((x) => x.id === recent[0].pack);
+      const sf = src && src.files.find((x) => x.file === recent[0].file);
+      const i = sf ? sf.brushes.indexOf(recent[0].brush) : -1;
+      const preview = sf && i >= 0 ? ((sf.tips && sf.tips[i]) || (sf.strokes && sf.strokes[i])) : null;
+      const list = store.get('myBrushes', []).filter((x) => x.name !== name);
+      list.push({ name, preview, tool: activeTool, px: currentBrush && currentBrush.px, from: recent[0] || null });
+      store.set('myBrushes', list);
+      status('Saved "' + name + '": find it under Mine');
+      if (tab === 'mine') render();
+    })
     .catch((e) => status('Could not save the brush: ' + (e.message || e)));
 }
 
@@ -991,6 +1033,8 @@ async function devHook() {
         await renderStrip(); out = stripUrl ? 'strip ' + stripUrl.length : 'no strip';
         if (stripUrl) { const bin = atob(stripUrl.split(',')[1]); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const sf = await d.createFile('strip.jpg', { overwrite: true }); await sf.write(u.buffer, { format: storage.formats.binary }); }
       }
+      else if (c.op === 'mine') { out = JSON.stringify(store.get('myBrushes', [])); }
+      else if (c.op === 'unmine') { await play([{ _obj: 'delete', _target: [{ _ref: 'brush', _name: c.name }] }]).catch(() => {}); store.set('myBrushes', store.get('myBrushes', []).filter((x) => x.name !== c.name)); }
       else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
       else out = 'ERR unknown op ' + c.op;
