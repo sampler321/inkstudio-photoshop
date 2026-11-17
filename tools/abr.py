@@ -50,7 +50,7 @@ def names(b, off, ln):
         if s.startswith('$$$/') and '=' in s: s = s.split('=', 1)[1]   # Adobe localisation key -> display name
         every.append(s)
         if b'brushPreset' in d[max(0, m.start()-24):m.start()]: res.append(s)
-    return res or list(dict.fromkeys(every))
+    return res or list(dict.fromkeys(re.sub(r'(?i)\.(jpe?g|png|tiff?|bmp|psd)$', '', x) for x in every))   # Photoshop drops image extensions
 
 def read(path, with_images=True):
     b = open(path, 'rb').read()

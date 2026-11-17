@@ -51,6 +51,16 @@ for d in sorted(os.listdir(lib)):
                   'description': m and m.get('description'), 'tags': m and m.get('tags'), 'builtin': bool(m and m.get('builtin')), 'envato': m and m.get('id'),
                   'files': files, 'count': sum(f['count'] for f in files)})
     print(d, packs[-1]['count'], 'meta' if m else 'NOMETA', flush=True)
+# keep rendered stroke previews from the previous catalogue where a file's brush names are unchanged
+if os.path.exists(f'{out}/catalog.json'):
+    prev = {p['id']: p for p in json.load(open(f'{out}/catalog.json'))['packs']}
+    for p in packs:
+        o = prev.get(p['id'])
+        if not o: continue
+        of = {f['file']: f for f in o['files']}
+        for f in p['files']:
+            if f['file'] in of and of[f['file']].get('strokes') and of[f['file']]['brushes'] == f['brushes']:
+                f['strokes'] = of[f['file']]['strokes']
 if ONLY is not None and os.path.exists(f'{out}/catalog.json'):   # merge re-indexed packs into the existing catalogue
     old = json.load(open(f'{out}/catalog.json'))['packs']; new = {p['id']: p for p in packs}
     packs = [new.pop(p['id'], p) for p in old] + list(new.values()); packs.sort(key=lambda p: p['id'])

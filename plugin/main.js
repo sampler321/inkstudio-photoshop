@@ -318,12 +318,15 @@ async function useBrush(p, f, b, cell) {
   cell && cell.classList.add('sel');
   const path = LIB.root + '/' + f.file;
   try {
-    if (!p.builtin && !loaded.has(path)) {   // builtin = already in Photoshop (its own default brushes)
+    // select first; load the pack only if Photoshop doesn't have the brush (presets can be removed outside the panel)
+    const names = [b, b.replace(/\.(jpe?g|png|tiff?|bmp|psd)$/i, '')];
+    const trySelect = async () => { for (const n of names) { try { await ps_.brush(n); return true; } catch (e) {} } return false; };
+    if (!(await trySelect())) {
+      if (p.builtin) throw new Error('not in Photoshop: ' + b);
       status(`Loading ${p.title}…`);
       await ps_.loadAbr(path);
-      loaded.add(path); store.set('loaded', [...loaded]);
+      if (!(await trySelect())) throw new Error('brush not found after loading: ' + b);
     }
-    await ps_.brush(b);
     // Envato tips are huge (often 2000-5000 px); start at the size last used with this brush, else 120 px
     const sizes = store.get('sizes', {});
     const med = MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {};
