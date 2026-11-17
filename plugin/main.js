@@ -191,13 +191,7 @@ function lazyImg(img, path) { imgUrl(path).then((u) => { img.src = u; }); }
 async function loadLibrary(root) {
   try {
     const cat = JSON.parse(await readText(root + '/.inkstudio/catalog.json'));
-    const SAMPLE = /^Sampled Brush \d+/i;
-    cat.packs.forEach((p) => {
-      p.media = packMedia(p);
-      // .abr files also name each sampled tip ("Sampled Brush 3 1"); keep only real preset names
-      p.files.forEach((f) => { const real = f.brushes.filter((b) => !SAMPLE.test(b)); if (real.length) f.brushes = [...new Set(real)]; });
-      p.count = p.files.reduce((a, f) => a + Math.max(f.brushes.length, f.tips.length ? 1 : 0), 0);
-    });
+    cat.packs.forEach((p) => { p.media = packMedia(p); });   // brush names come exact from the catalogue
     LIB = { root, packs: cat.packs.filter((p) => p.count > 0) };
     store.set('root', root);
     const n = LIB.packs.reduce((a, p) => a + p.count, 0);
@@ -284,8 +278,25 @@ function packBody(p) {
   }
   p.files.forEach((f) => {
     if (p.files.length > 1) body.appendChild(el('div', 'file', f.file.split('/').pop().replace(/\.abr$/i, '')));
-    const grid = el('div', 'grid');
     const names = f.brushes.length ? f.brushes : f.tips.map((_, i) => `Brush ${i + 1}`);
+    if (f.strokes && f.strokes.some(Boolean)) {
+      // Procreate-style rows: a real stroke rendered by Photoshop with this brush, name underneath
+      const list = el('div', 'strokes');
+      names.forEach((b, i) => {
+        const row = el('div', 'srow');
+        const im = el('img', 'stroke');
+        if (f.strokes[i]) lazyImg(im, LIB.root + '/.inkstudio/' + f.strokes[i]); else im.classList.add('blank');
+        row.appendChild(im);
+        const line = el('div', 'sline'); line.appendChild(el('div', 'name', b)); line.appendChild(star(key(p, f, b)));
+        row.appendChild(line);
+        row.title = b;
+        row.onclick = () => useBrush(p, f, b, row);
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+      return;
+    }
+    const grid = el('div', 'grid');
     names.forEach((b, i) => {
       const cell = el('div', 'cell');
       const im = el('img', 'tip');
@@ -303,11 +314,11 @@ function packBody(p) {
   return body;
 }
 async function useBrush(p, f, b, cell) {
-  document.querySelectorAll('.cell.sel').forEach((c) => c.classList.remove('sel'));
+  document.querySelectorAll('.cell.sel, .srow.sel').forEach((c) => c.classList.remove('sel'));
   cell && cell.classList.add('sel');
   const path = LIB.root + '/' + f.file;
   try {
-    if (!loaded.has(path)) {
+    if (!p.builtin && !loaded.has(path)) {   // builtin = already in Photoshop (its own default brushes)
       status(`Loading ${p.title}…`);
       await ps_.loadAbr(path);
       loaded.add(path); store.set('loaded', [...loaded]);

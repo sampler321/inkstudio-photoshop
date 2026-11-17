@@ -71,3 +71,11 @@ body { background: var(--bg); color: var(--fg); font-size: 12px; margin: 0; }
 .rail .ptog.on { color: #fff; background: var(--hi); border-color: var(--hi); }
 .rail .tool.on { background: var(--hi); border-color: var(--hi); color: #fff; }
 .rail .ptog.own { color: var(--fg); border-style: dashed; }
+.strokes { display: flex; flex-direction: column; gap: 2px; }
+.srow { border-radius: 5px; padding: 2px 4px 3px; border: 1px solid transparent; }
+.srow:hover { background: rgba(255,255,255,0.05); }
+.srow.sel { border-color: var(--hi); }
+.stroke { width: 100%; height: 44px; object-fit: contain; background: #f4f1ea; border-radius: 4px; }
+.stroke.blank { background: #3a3a3a; }
+.sline { display: flex; align-items: center; justify-content: space-between; }
+.sline .name { font-size: 10px; }

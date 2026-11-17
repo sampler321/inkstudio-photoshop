@@ -6,6 +6,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import abr
 from PIL import Image, ImageOps
 import shutil
+ONLY = None
+if '--only' in sys.argv:
+    i = sys.argv.index('--only'); ONLY = set(sys.argv[i+1].split(',')); del sys.argv[i:i+2]
 lib = sys.argv[1]; meta_p = sys.argv[2] if len(sys.argv) > 2 else '-'; cov = sys.argv[3] if len(sys.argv) > 3 else None
 out = os.path.join(lib, '.inkstudio'); os.makedirs(f'{out}/covers', exist_ok=True)
 os.makedirs(f'{out}/tips', exist_ok=True)
@@ -17,6 +20,7 @@ packs = []
 for d in sorted(os.listdir(lib)):
     pd = os.path.join(lib, d)
     if d.startswith('.') or not os.path.isdir(pd): continue
+    if ONLY is not None and d not in ONLY: continue
     files = []
     for root, _, fs in os.walk(pd):
         for f in sorted(fs):
@@ -44,8 +48,11 @@ for d in sorted(os.listdir(lib)):
             if os.path.exists(src):
                 im = Image.open(src).convert('RGB'); im.thumbnail((480, 320)); fn = f"covers/{d}_{i}.jpg"; im.save(f'{out}/{fn}', quality=82); covers.append(fn)
     packs.append({'covers': covers, 'id': d, 'title': (m.get('title') if m else None) or d.replace('-', ' ').title(), 'author': m and m.get('author'),
-                  'description': m and m.get('description'), 'tags': m and m.get('tags'), 'envato': m and m.get('id'),
+                  'description': m and m.get('description'), 'tags': m and m.get('tags'), 'builtin': bool(m and m.get('builtin')), 'envato': m and m.get('id'),
                   'files': files, 'count': sum(f['count'] for f in files)})
     print(d, packs[-1]['count'], 'meta' if m else 'NOMETA', flush=True)
-json.dump({'packs': packs}, open(f'{out}/catalog.json', 'w'), indent=1)
+if ONLY is not None and os.path.exists(f'{out}/catalog.json'):   # merge re-indexed packs into the existing catalogue
+    old = json.load(open(f'{out}/catalog.json'))['packs']; new = {p['id']: p for p in packs}
+    packs = [new.pop(p['id'], p) for p in old] + list(new.values()); packs.sort(key=lambda p: p['id'])
+tmp = f'{out}/catalog.json.tmp'; json.dump({'packs': packs}, open(tmp, 'w'), indent=1); os.replace(tmp, f'{out}/catalog.json')
 print('PACKS', len(packs), 'BRUSHES', sum(p['count'] for p in packs))

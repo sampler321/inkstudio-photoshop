@@ -47,6 +47,7 @@ def names(b, off, ln):
     for m in re.finditer(rb'Nm  TEXT(....)', d):
         n = struct.unpack('>I', m.group(1))[0]
         s = d[m.end():m.end()+2*n].decode('utf-16-be', 'ignore').rstrip('\0')
+        if s.startswith('$$$/') and '=' in s: s = s.split('=', 1)[1]   # Adobe localisation key -> display name
         every.append(s)
         if b'brushPreset' in d[max(0, m.start()-24):m.start()]: res.append(s)
     return res or list(dict.fromkeys(every))
