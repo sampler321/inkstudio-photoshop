@@ -543,11 +543,13 @@ async function renderInspector() {
   const pr = penProfile(o);
   body.innerHTML = '';
   body.appendChild(el('div', 'inspTip', pr.tip + (pr.name ? ', ' + pr.name : '')));
+  if (bpHelp && TIP_HELP[(o.brush || {})._obj]) body.appendChild(helpLine(TIP_HELP[(o.brush || {})._obj]));
   const groups = {};
   pr.rows.forEach((r) => (groups[r.control] = groups[r.control] || []).push(r));
   if (!pr.rows.length) body.appendChild(el('div', 'inspNone', 'Nothing on this brush follows the pen.'));
   Object.keys(groups).forEach((g) => {
     body.appendChild(el('div', 'inspGroup', g));
+    if (bpHelp && CONTROL_HELP[g]) body.appendChild(helpLine(CONTROL_HELP[g]));
     groups[g].forEach((r) => {
       const row = el('div', 'inspRow');
       row.appendChild(el('span', 'inspWhat', r.what + (r.min ? '  (min ' + Math.round(r.min) + '%)' : '')));
@@ -670,6 +672,40 @@ async function applyFeel(id) {
   renderBrushPanel();
 }
 
+
+/* plain-language help: what each tip type, pen input and setting means, and how to tune it */
+const TIP_HELP = {
+  sampledBrush: 'Image tip: a picture of a mark (charcoal grain, a bristle smear, a splatter) stamped along the stroke. Its look comes from the picture. Tune spacing for smoother or dottier strokes, angle and roundness to turn or squash it, and the pen controls for how it reacts.',
+  computedBrush: 'Round tip: a simple mathematical circle, hard or soft. Clean and predictable. Hardness sets how soft the edge is; everything else comes from the pen controls.',
+  dBrush: 'Bristle tip: Photoshop simulates individual bristles with physics. Pressing harder pushes more bristles onto the paper (wider, denser, darker) even with every pen control off. Tune bristles (count), length, thickness and stiffness; stiff short bristles give crisp strokes, soft long ones streaky paint. To stop pressure acting, use Brush pose and fix pressure.',
+  dTips: 'Erodible or airbrush tip: an erodible tip is a pencil or chalk point that wears flat as you draw (Sharpen in Photoshop restores it); pressure widens it. An airbrush tip sprays: light pressure spreads widest. Tune softness and shape (erodible) or granularity, splatter size and count (airbrush).',
+};
+const CONTROL_HELP = {
+  'Off': 'Not linked to the pen. Random and min still apply.',
+  'Pressure': 'How hard you press. Light touch gives the min value, full pressure 100%.',
+  'Tilt': 'How far the pen leans. Upright gives the min value, flat gives 100%. Needs a pen that sends tilt.',
+  'Direction': 'The way the stroke is moving right now, so a flat tip follows your curves like a calligraphy nib.',
+  'Initial direction': 'The direction the stroke started in, then kept: the tip stays at that angle for the whole stroke.',
+  'Rotation': 'Turning the pen around its own axis (only pens with barrel rotation, like Wacom Art Pen).',
+  'Initial rotation': 'The pen rotation at the start of the stroke, kept for the whole stroke.',
+  'Fade': 'Goes from full to the min value over a number of dabs, like ink running out.',
+  'Stylus wheel': 'The finger wheel on a Wacom airbrush pen.',
+  'Random': 'Changes each dab by a random amount, which makes the stroke look hand-made rather than digital.',
+};
+const ASPECT_HELP = {
+  'Size': 'Line width. Min sets the thinnest it gets (for example 30% = never thinner than a third).',
+  'Opacity': 'How dark each stroke can get. Overlapping strokes do not build past it.',
+  'Flow': 'How much paint each dab lays down. Low flow builds up where strokes overlap, like real graphite or watercolour.',
+  'Angle': 'Which way the tip points. Matters for flat or shaped tips (chisel, nib, flat brush).',
+  'Roundness': 'How squashed the tip is: 100% round, low = a flat sliver. Min sets the flattest.',
+  'Grain depth': 'How much the paper grain shows. Light pressure usually shows more tooth, like a real pencil.',
+  'Scatter': 'How far dabs jump off the line, for spray, foliage and texture.',
+  'Dab count': 'How many dabs per step. More = denser, darker strokes.',
+  'Colour': 'Mixes between foreground and background colour, for colour that varies within a stroke.',
+};
+let bpHelp = store.get('bpHelp', true);
+const helpLine = (t) => el('div', 'bpHelpTxt', t);
+
 /* ---------- Brush panel: every brush setting the pen can touch, editable ---------- */
 const ASPECTS = [   // [label, key candidates, switch that must be on for it to work]
   ['Size', ['$szVr'], 'useTipDynamics'], ['Opacity', ['$opVr'], 'usePaintDynamics'], ['Flow', ['$prVr'], 'usePaintDynamics'],
@@ -728,6 +764,7 @@ async function renderBrushPanel() {
     sec.appendChild(sb);
     const tb = el('div', 'b bpReset', stripUrl ? 'Test stroke again' : 'Test stroke (light, heavy, light)'); tb.onclick = () => renderStrip(); sec.appendChild(tb);
     if (stripUrl) { const im = el('img', 'strip'); im.src = stripUrl; sec.appendChild(im); }
+    if (bpHelp) sec.appendChild(helpLine('Each row is one thing about the stroke. Driven by: which pen input changes it. Random: extra variation per dab. Min: the value at the lightest touch (or most upright pen).'));
     const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
     const used = (keys, sw) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object'); const v = k && o[k]; return v && o[sw] !== false && (v.$bVTy || pct(v.jitter) > 0); };
     const extra = store.get('bpExtra', []);
@@ -738,12 +775,13 @@ async function renderBrushPanel() {
       const v = o[k] || { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) };
       const active = o[sw] !== false;
       const row = el('div', 'bpRow' + (active ? '' : ' dim'));
-      row.appendChild(el('span', 'bpCell bpLabel', label));
+      const lab = el('span', 'bpCell bpLabel', label); lab.title = ASPECT_HELP[label] || ''; row.appendChild(lab);
       const write = (chg) => setOpt(Object.assign({ [k]: Object.assign({ _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) }, v, chg) }, { [sw]: true }), label);
       row.appendChild(sel(CONTROLS, v.$bVTy || 0, (c) => write({ $bVTy: +c })));
       row.appendChild(num(pct(v.jitter), (x) => write({ jitter: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Random amount %' }));
       row.appendChild(num(pct(v.minimum), (x) => write({ minimum: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Lowest value at the lightest pressure / tilt %' }));
       sec.appendChild(row);
+      if (bpHelp) { const cn = (CONTROLS.find((c) => c[0] === (v.$bVTy || 0)) || [0, 'Off'])[1]; sec.appendChild(helpLine(ASPECT_HELP[label] + ' ' + cn + ': ' + CONTROL_HELP[cn])); }
     });
     if (!sec.querySelector('.bpRow:not(.bpHdr)')) sec.appendChild(el('div', 'bpNote', 'Nothing on this brush follows the pen.'));
     if (hidden.length) sec.appendChild(kv('Add pen link', sel([['', 'choose…']].concat(hidden.map((h) => [h, h])), '', (x) => { if (x) { store.set('bpExtra', extra.concat([x])); renderBrushPanel(); } })));
@@ -761,6 +799,7 @@ async function renderBrushPanel() {
   if (bpOpen.tip === undefined || bpOpen._for !== b._obj) { bpOpen.tip = b._obj === 'dBrush' || b._obj === 'dTips'; bpOpen._for = b._obj; }
   if (o.useBrushPose) bpOpen.pose = true;
   body.appendChild(section('tip', 'Tip: ' + (TIP[b._obj] || b._obj || ''), (sec) => {
+    if (bpHelp && TIP_HELP[b._obj]) sec.appendChild(helpLine(TIP_HELP[b._obj]));
     const skip = new Set(['_obj', 'name', 'sampledData', 'interfaceIconFrameDimmed', 'flipX', 'flipY']);
     Object.keys(b).filter((k) => !skip.has(k)).forEach((k) => {
       const v = b[k];
@@ -777,6 +816,7 @@ async function renderBrushPanel() {
   }));
   // 4. brush pose
   body.appendChild(section('pose', 'Brush pose (override the pen)', (sec) => {
+    if (bpHelp) sec.appendChild(helpLine('Brush pose replaces what the pen reports with fixed values. Override pressure to make a brush behave the same however hard you press (the only way to calm bristle tips); override tilt or rotation to fake a pen angle.'));
     sec.appendChild(kv('Brush pose', tog(o.useBrushPose, (x) => setOpt({ useBrushPose: x }))));
     [['Tilt X', 'overridePoseTiltX', 'brushPoseTiltX'], ['Tilt Y', 'overridePoseTiltY', 'brushPoseTiltY'], ['Rotation', 'overridePoseAngle', 'brushPoseAngle'], ['Pressure', 'overridePosePressure', 'brushPosePressure']].forEach(([lab, ov, val]) => {
       const row = el('div', 'bpKV'); row.appendChild(el('span', 'bpKey', 'Override ' + lab));
@@ -851,6 +891,8 @@ function initLibrary() {
   setView(store.get('zoom', 0));
   vbtns.forEach((b) => b.onclick = () => { setView(+b.dataset.z); render(); });
   $('#bpRefresh').onclick = () => renderBrushPanel();
+  const bpQ = $('#bpHelp'); const paintQ = () => bpQ.classList.toggle('on', bpHelp); paintQ();
+  bpQ.onclick = () => { bpHelp = !bpHelp; store.set('bpHelp', bpHelp); paintQ(); renderBrushPanel(); renderInspector(); };
   const bpMode = $('#bpMode'); const paintMode = () => { bpMode.textContent = bpAll ? 'All' : 'Simple'; bpMode.classList.toggle('on', bpAll); };
   paintMode(); bpMode.onclick = () => { bpAll = !bpAll; store.set('bpAll', bpAll); paintMode(); renderBrushPanel(); };
   $('#inspHead').onclick = () => { inspOpen = !inspOpen; store.set('inspOpen', inspOpen); renderInspector(); };
