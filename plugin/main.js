@@ -606,6 +606,7 @@ async function renderStrip() {
   renderBrushPanel();
 }
 
+const impastoSettings = () => Object.assign({ stylization: 4, cleanliness: 6, brushScale: 1, microBrush: 2, lightingOn: true, lightDirection: -60, specularity: 1.3, opacity: 100, blend: 'softLight' }, store.get('impasto', {}));
 /* feel presets: tested combinations so nobody has to hand-tune minimums and jitter */
 const D = (c, min = 0, jit = 0) => ({ _obj: '$brVr', $bVTy: c, $fStp: 25, jitter: P(jit), minimum: P(min) });
 const FEELS = [
@@ -722,6 +723,12 @@ const FIELD_HELP = {
   'Grain depth %': 'How strongly the paper grain shows. 0 = smooth, 100 = only the raised paper gets paint.',
   'Grain scale %': 'Size of the paper grain. Bigger = coarser paper.',
   'Grain mode': 'How the grain cuts into paint. Subtract and Height read as graphite on tooth; Multiply is rougher.',
+  'Strength %': 'Smudge: how far the paint is dragged. 100% drags the colour along the whole stroke.',
+  'Finger painting': 'Smudge: each stroke starts with the foreground colour mixed in, like a finger dipped in paint. Option while dragging toggles it.',
+  'Sample all layers': 'Pick up and blend paint from every visible layer, so you can blend on a new, empty layer and keep the paint underneath safe.',
+  'Clean after each stroke': 'Mixer: the brush is wiped clean after every stroke, so each stroke starts fresh.',
+  'Load after each stroke': 'Mixer: the brush is refilled with the foreground colour after every stroke. Off = it carries the mixed, dirty paint on, like a real brush.',
+  'Load solid colours only': 'Mixer: the brush loads one flat colour instead of the varied colour under it.',
   'Smoothing %': 'Steadies the line by lagging behind the pen. Higher = smoother curves, slower response (Procreate StreamLine).',
   'Wetness %': 'Mixer Brush: how much paint it picks up from the canvas. High = blends more.',
   'Load %': 'Mixer Brush: how much paint is on the brush. Low runs out along the stroke.',
@@ -901,6 +908,30 @@ async function renderBrushPanel() {
     }
     if ('smoothingValue' in o) sec.appendChild(kv('Smoothing %', num(o.smoothingValue, (x) => setOpt({ smoothingValue: Math.round(x) }))));
     ['wetness', 'dryness', 'mix'].forEach((k) => { if (k in o) sec.appendChild(kv(k === 'dryness' ? 'Load %' : k[0].toUpperCase() + k.slice(1) + ' %', num(o[k], (x) => setOpt({ [k]: Math.round(x) })))); });
+  }));
+  // tool-specific: Mixer Brush (wet paint) and Smudge, based on what is active in Photoshop
+  if ('wetness' in o) body.appendChild(section('mixer', 'Wet paint (Mixer Brush)', (sec) => {
+    if (bpHelp) sec.appendChild(helpLine('The Mixer Brush carries paint and picks paint up from the canvas, like oil. Wet = how much canvas paint it picks up, Load = paint on the brush, Mix = canvas versus brush paint.'));
+    [['Wetness %', 'wetness'], ['Load %', 'dryness'], ['Mix %', 'mix'], ['Flow %', 'flow']].forEach(([lab, k]) => { if (k in o) sec.appendChild(kv(lab, num(o[k], (x) => setOpt({ [k]: Math.round(x) })))); });
+    [['Clean after each stroke', 'autoClean'], ['Load after each stroke', 'autoFill'], ['Load solid colours only', 'loadSolidColorOnly'], ['Sample all layers', 'sampleAllLayers']].forEach(([lab, k]) => { if (k in o) sec.appendChild(kv(lab, tog(o[k], (x) => setOpt({ [k]: x })))); });
+  }));
+  if ('smudgeStick' in o || '$SmdF' in o) body.appendChild(section('smudge', 'Smudge', (sec) => {
+    if (bpHelp) sec.appendChild(helpLine('Smudge pushes paint that is already there along your stroke, like a finger or a dry brush smearing oil or pastel. It adds no paint unless finger painting is on.'));
+    if ('pressure' in o) sec.appendChild(kv('Strength %', num(o.pressure, (x) => setOpt({ pressure: Math.round(x) }))));
+    if ('$SmdF' in o) sec.appendChild(kv('Finger painting', tog(o.$SmdF, (x) => setOpt({ $SmdF: x }))));
+    if ('smudgeStick' in o) sec.appendChild(kv('Sample all layers', tog(o.smudgeStick, (x) => setOpt({ smudgeStick: x }))));
+  }));
+  // impasto settings, used by the rail's Impasto button
+  body.appendChild(section('impasto', 'Impasto (oil relief)', (sec) => {
+    const im = impastoSettings();
+    if (bpHelp) sec.appendChild(helpLine('The rail\'s Impasto button copies everything you painted onto a new layer and runs Photoshop\'s Oil Paint filter on it, so paint gets ridges and light. Your painting underneath is untouched; hide or delete the layer to undo.'));
+    const put = (k, x) => { const m = impastoSettings(); m[k] = x; store.set('impasto', m); renderBrushPanel(); };
+    [['Stylization', 'stylization', 'How swirly and painterly the strokes become (0.1 to 10).'], ['Cleanliness', 'cleanliness', 'Smooth (high) or gritty, detailed (low) paint (0 to 10).'],
+     ['Scale', 'brushScale', 'Size of the paint strokes and ridges (0.1 to 10).'], ['Bristle detail', 'microBrush', 'Fine bristle grooves inside the strokes (0 to 10).'],
+     ['Light angle °', 'lightDirection', 'Where the light comes from, so ridges catch highlights.'], ['Shine', 'specularity', 'How glossy and raised the paint looks (0 to 10).'],
+     ['Effect strength %', 'opacity', 'Opacity of the impasto layer.']].forEach(([lab, k, h]) => sec.appendChild(kv(lab, num(im[k], (x) => put(k, x)), h)));
+    sec.appendChild(kv('Lighting', tog(im.lightingOn, (x) => put('lightingOn', x)), 'Off = only the paint swirl, no raised relief.'));
+    sec.appendChild(kv('Blend', sel([['softLight', 'Soft light'], ['overlay', 'Overlay'], ['normal', 'Normal'], ['linearLight', 'Linear light']], im.blend, (x) => put('blend', x)), 'How the relief sits on your painting. Soft light keeps colours true and the paper clean.'));
   }));
 }
 function kv(label, ctl, help) {
@@ -1096,13 +1127,13 @@ function initRail() {
   // finishing: Photoshop's Oil Paint filter on a merged copy, so the painting underneath stays untouched
   // finishing: Photoshop's Oil Paint filter on a merged copy in Soft Light (paint gains relief, white paper stays clean);
   // the painting underneath is untouched, hide or delete the layer to undo the look
-  $('#impasto').onclick = () => play([
+  $('#impasto').onclick = () => { const im = impastoSettings(); return play([
     { _obj: 'make', _target: [{ _ref: 'layer' }] },
     { _obj: 'mergeVisible', duplicate: true },
-    { _obj: 'oilPaint', stylization: 4, cleanliness: 6, brushScale: 1, microBrush: 2, lightingOn: true, lightDirection: -60, specularity: 1.3 },
+    { _obj: 'oilPaint', stylization: im.stylization, cleanliness: im.cleanliness, brushScale: im.brushScale, microBrush: im.microBrush, lightingOn: !!im.lightingOn, lightDirection: Math.round(im.lightDirection), specularity: im.specularity },
     { _obj: 'set', _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'layer', name: 'Impasto (oil paint)' } },
-    { _obj: 'set', _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'layer', mode: { _enum: 'blendMode', _value: 'softLight' } } },
-  ], 'Impasto').catch((e) => log('impasto', e));
+    { _obj: 'set', _target: [{ _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }], to: { _obj: 'layer', mode: { _enum: 'blendMode', _value: im.blend }, opacity: { _unit: 'percentUnit', _value: im.opacity } } },
+  ], 'Impasto').catch((e) => log('impasto', e)); };
   $('#undo').onclick = () => ps_.step('previous').catch((e) => console.error(e));
   $('#redo').onclick = () => ps_.step('next').catch((e) => console.error(e));
   $('#color').onclick = async () => {
