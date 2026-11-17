@@ -856,7 +856,7 @@ function initRail() {
   pO.onclick = () => { prs.opacity = !pO.classList.contains('on'); savePrs(); paintP(); applyP().then(() => syncRail && syncRail()); };
   const pT = $('#pTilt');
   const paintT = () => pT.classList.toggle('on', !!prs.tilt);
-  pT.onclick = () => { prs.tilt = !prs.tilt; savePrs(); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
+  pT.onclick = () => { prs.tilt = !pT.classList.contains('on'); savePrs(); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
   paintP(); paintT();
   applyPressure = applyP;
   let fxNow = { paper: false, wet: false, layer: false };
