@@ -163,7 +163,7 @@ let loaded = new Set(store.get('loaded', []));
 let favs = new Set(store.get('favs', []));
 let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
-let inspT = null;
+let inspT = null, loadPressure = null;
 let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
 const showAll = new Set();
@@ -407,11 +407,12 @@ async function useBrush(p, f, b, cell) {
     await ps_.size(px);
     const native = await nativeOptions();   // the maker's settings, read before any switch touches them
     currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics, $szVr: native.$szVr, $opVr: native.$opVr, $prVr: native.$prVr, textureDepthDynamics: native.textureDepthDynamics } };
+    loadPressure && loadPressure(key(p, f, b));   // this brush's switches (default: the maker's design)
     applyPressure && await applyPressure();
     const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {});
     if (native.useTexture) { fx.paper = false; fx.own = true; }       // maker's grain wins
     if (native.wetEdges) fx.wet = true;
-    fx.tilt = !!store.get('pressure', {}).tilt;
+    fx.tilt = !!(loadPressure ? loadPressure(key(p, f, b)) : {}).tilt;
     Object.assign(fx, store.get('fx', {})[key(p, f, b)] || {});
     setFx && await setFx(fx);
     lastBrushKey = key(p, f, b);
@@ -763,7 +764,11 @@ function initRail() {
     } });
   showSize(); opV.textContent = '100%';
   const pS = $('#pSize'), pO = $('#pOpacity');
-  const prs = store.get('pressure', { size: true, opacity: true });
+  // per brush, starting from the maker's design: on = the brush's own pressure/tilt links, off = silenced
+  const prsFor = (k) => Object.assign({ size: true, opacity: true, tilt: false }, (store.get('pressureBy', {})[k || 'default']) || {});
+  let prs = prsFor(lastBrushKey);
+  const savePrs = () => { const all = store.get('pressureBy', {}); all[lastBrushKey || 'default'] = { size: prs.size, opacity: prs.opacity, tilt: prs.tilt }; store.set('pressureBy', all); };
+  loadPressure = (k) => { prs = prsFor(k); paintP(); paintT(); return prs; };
   const paintP = () => { pS.classList.toggle('on', prs.size); pO.classList.toggle('on', prs.opacity); };
   // on = Photoshop's pressure overrides; off = also silence the brush's own pressure response, so off really means off
   const OFF = { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 0 } };
@@ -773,19 +778,19 @@ function initRail() {
       const nat = (currentBrush && currentBrush.native) || {};
       const PRESS = Object.assign({}, OFF, { $bVTy: 2 });
       // on = the maker's own pressure settings (pressure added only where the brush had none); off = silent
-      const set = (k, on) => { if (!(k in cur)) return; patch[k] = !on ? OFF : (nat[k] && nat[k].$bVTy ? nat[k] : PRESS); };
-      const patch = { usePressureOverridesSize: prs.size, usePressureOverridesOpacity: prs.opacity };
+      const set = (k, on) => { if (!(k in cur)) return; patch[k] = !on ? OFF : (nat[k] || cur[k]); };
+      const patch = { usePressureOverridesSize: false, usePressureOverridesOpacity: false };   // the brush's own design decides
       set('$szVr', prs.size);
       set('$opVr', prs.opacity); set('$prVr', prs.opacity);   // opacity switch: opacity, flow
       if (cur.useTexture) set('textureDepthDynamics', prs.opacity);   // ...and grain depth
       await ps_.toolOpts(patch, 'Pressure');
     } catch (e) { log('pressure', e); }
   };
-  pS.onclick = () => { prs.size = !prs.size; store.set('pressure', prs); paintP(); applyP(); };
-  pO.onclick = () => { prs.opacity = !prs.opacity; store.set('pressure', prs); paintP(); applyP(); };
+  pS.onclick = () => { prs.size = !prs.size; savePrs(); paintP(); applyP(); };
+  pO.onclick = () => { prs.opacity = !prs.opacity; savePrs(); paintP(); applyP(); };
   const pT = $('#pTilt');
   const paintT = () => pT.classList.toggle('on', !!prs.tilt);
-  pT.onclick = () => { prs.tilt = !prs.tilt; store.set('pressure', prs); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
+  pT.onclick = () => { prs.tilt = !prs.tilt; savePrs(); paintT(); if (setFx) setFx(Object.assign({}, fxNowRef(), { tilt: prs.tilt })); };
   paintP(); paintT();
   applyPressure = applyP;
   let fxNow = { paper: false, wet: false, layer: false };
