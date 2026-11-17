@@ -50,6 +50,12 @@ so the Brushes panel ends as it started. `--when-idle` only works while the comp
 In Photoshop open **Plugins > InkStudio > InkStudio Brushes** and **InkStudio Rail**, press the gear and choose the
 folder (or write its path into the plugin's data folder as `library.txt`).
 
+## Workspace
+
+`workspace/InkStudio.psw`: the rail docked beside Photoshop's toolbar, the brush library on the right above Layers,
+Properties / Adjustments / Libraries / Color closed. Copy it into
+`~/Library/Preferences/Adobe Photoshop 2026 Settings/WorkSpaces/` and pick Window > Workspace > InkStudio.
+
 ## Install (development)
 
 `tools/dev-reload.sh` packages `plugin/` as a .ccx, installs it with Adobe's plugin installer and restarts Photoshop
