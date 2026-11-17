@@ -180,3 +180,5 @@ html, body { height: 100%; overflow: hidden; }
 .tipLab { font-size: 10px; color: var(--mut); margin: 0 6px 0 2px; }
 .cell { position: relative; }
 .noTip { position: absolute; left: 0; right: 0; top: 30%; text-align: center; color: #222; font-size: 22px; }
+.bpBtns2 { display: flex; flex-direction: row; }
+.bpBtns2 .bpReset { flex: 1 1 0; margin-right: 4px; }

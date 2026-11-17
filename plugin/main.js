@@ -492,7 +492,7 @@ async function useBrush(p, f, b, cell) {
     const px = sizes[key(p, f, b)] || med.px || 120;
     await ps_.size(px);
     const native = await nativeOptions();   // the maker's settings, read before any switch touches them
-    currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics, $szVr: native.$szVr, $opVr: native.$opVr, $prVr: native.$prVr, textureDepthDynamics: native.textureDepthDynamics } };
+    currentBrush = { name: b, px, native: { useTipDynamics: native.useTipDynamics, angleDynamics: native.angleDynamics, roundnessDynamics: native.roundnessDynamics, $szVr: native.$szVr, $opVr: native.$opVr, $prVr: native.$prVr, textureDepthDynamics: native.textureDepthDynamics, scatterDynamics: native.scatterDynamics, countDynamics: native.countDynamics, $clVr: native.$clVr, flipX: native.flipX, flipY: native.flipY, useScatter: native.useScatter } };
     stripUrl = null;
     loadPressure && loadPressure(key(p, f, b));   // this brush's switches (default: the maker's design)
     applyPressure && await applyPressure();
@@ -840,9 +840,9 @@ async function renderBrushPanel() {
     sec.appendChild(sb);
     const tb = el('div', 'b bpReset', stripUrl ? 'Test stroke again' : 'Test stroke (light, heavy, light)'); tb.onclick = () => renderStrip(); sec.appendChild(tb);
     if (stripUrl) { const im = el('img', 'strip'); im.src = stripUrl; sec.appendChild(im); }
-    if (bpHelp) sec.appendChild(helpLine('Each row is one thing about the stroke. Driven by: which pen input changes it. Random: extra variation per dab. Min: the value at the lightest touch (or most upright pen).'));
-    const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
-    const used = (keys, sw) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object'); const v = k && o[k]; return v && o[sw] !== false && (v.$bVTy || pct(v.jitter) > 0); };
+    if (bpHelp) sec.appendChild(helpLine('Each row is one thing about the stroke. Driven by: which pen input changes it. Min: the value at the lightest touch (or most upright pen). Randomness has its own section below.'));
+    const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
+    const used = (keys, sw) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object'); const v = k && o[k]; return v && o[sw] !== false && v.$bVTy; };
     const extra = store.get('bpExtra', []);
     const hidden = [];
     ASPECTS.forEach(([label, keys, sw]) => {
@@ -854,16 +854,12 @@ async function renderBrushPanel() {
       const lab = el('span', 'bpCell bpLabel', label); lab.title = ASPECT_HELP[label] || ''; row.appendChild(lab);
       const write = (chg) => setOpt(Object.assign({ [k]: Object.assign({ _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) }, v, chg) }, { [sw]: true }), label);
       row.appendChild(sel(CONTROLS, v.$bVTy || 0, (c) => write({ $bVTy: +c })));
-      row.appendChild(num(pct(v.jitter), (x) => write({ jitter: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Random amount %' }));
       row.appendChild(num(pct(v.minimum), (x) => write({ minimum: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Lowest value at the lightest pressure / tilt %' }));
       sec.appendChild(row);
       if (bpHelp) { const cn = (CONTROLS.find((c) => c[0] === (v.$bVTy || 0)) || [0, 'Off'])[1]; sec.appendChild(helpLine(ASPECT_HELP[label] + ' ' + cn + ': ' + CONTROL_HELP[cn])); }
     });
     if (!sec.querySelector('.bpRow:not(.bpHdr)')) sec.appendChild(el('div', 'bpNote', 'Nothing on this brush follows the pen.'));
     if (hidden.length) sec.appendChild(kv('Add pen link', sel([['', 'choose…']].concat(hidden.map((h) => [h, h])), '', (x) => { if (x) { store.set('bpExtra', extra.concat([x])); renderBrushPanel(); } })));
-    // random mirroring per dab (Shape Dynamics flip jitter): with angle randomness it hides repeating tip patterns
-    if ('flipX' in o) sec.appendChild(kv('Random flip X', tog(!!o.flipX, (x) => setOpt({ flipX: x, useTipDynamics: true }))));
-    if ('flipY' in o) sec.appendChild(kv('Random flip Y', tog(!!o.flipY, (x) => setOpt({ flipY: x, useTipDynamics: true }))));
     if (!bpAll) { if (sec.querySelector('.bpRow:not(.bpHdr)') && o.minimumDiameter && o.$szVr && o.$szVr.$bVTy) sec.appendChild(kv('Smallest size %', num(pct(o.minimumDiameter), (x) => setOpt({ minimumDiameter: P(x) })))); return; }
     if (o.minimumDiameter) sec.appendChild(kv('Smallest size %', num(pct(o.minimumDiameter), (x) => setOpt({ minimumDiameter: P(x) }))));
     if (o.minimumRoundness) sec.appendChild(kv('Flattest roundness %', num(pct(o.minimumRoundness), (x) => setOpt({ minimumRoundness: P(x) }))));
@@ -871,6 +867,34 @@ async function renderBrushPanel() {
     if ('brushProjection' in o) sec.appendChild(kv('Brush projection (tilt shapes the tip)', tog(o.brushProjection, (x) => setOpt({ brushProjection: x }))));
     sec.appendChild(kv('Top-bar pressure for size', tog(o.usePressureOverridesSize, (x) => setOpt({ usePressureOverridesSize: x }))));
     sec.appendChild(kv('Top-bar pressure for opacity', tog(o.usePressureOverridesOpacity, (x) => setOpt({ usePressureOverridesOpacity: x }))));
+  }));
+  // 1b. randomness: every per-dab variation in one place (jitter of each setting, flips, spacing)
+  if (bpOpen.random === undefined) bpOpen.random = true;
+  body.appendChild(section('random', 'Randomness', (sec) => {
+    if (bpHelp) sec.appendChild(helpLine('Variation per dab, independent of the pen. It makes a stamped image tip look hand-made and stops loose edge points from repeating as a pattern. 0 = none, 100 = maximum.'));
+    const jit = (keys) => { const k = keys.find((x) => o[x] && typeof o[x] === 'object') || keys[0]; return [k, o[k]]; };
+    const setJ = (keys, sw, x) => { const [k, v] = jit(keys); setOpt(Object.assign({ [k]: Object.assign({ _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) }, v || {}, { jitter: P(Math.max(0, Math.min(100, x))) }) }, x > 0 ? { [sw]: true } : {}), 'Randomness'); };
+    const apply = (vals, flips) => { const ch = {}; ASPECTS.forEach(([label, keys, sw]) => { const [k, v] = jit(keys); const x = vals[label] || 0; if (!v && !x) return; ch[k] = Object.assign({ _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) }, v || {}, { jitter: P(x) }); if (x > 0) ch[sw] = true; }); if ('flipX' in o) { ch.flipX = flips; ch.flipY = flips; } return setOpt(ch, 'Randomness').then(renderStrip); };
+    const original = () => { const nat = (currentBrush && currentBrush.native) || {}; const vals = {}; ASPECTS.forEach(([label, keys]) => { const k = keys.find((x) => nat[x] && typeof nat[x] === 'object'); vals[label] = k ? pct(nat[k].jitter) || 0 : 0; }); return apply(vals, !!nat.flipX).then(() => ('useScatter' in nat ? setOpt({ useScatter: !!nat.useScatter }, 'Randomness') : null)); };
+    const RP = [   // tested starting points, so nobody has to dial randomness in by hand
+      ['', 'choose a preset…'], ['original', "Maker's original"], ['none', 'None (clean, digital)'],
+      ['subtle', 'Subtle (pencil, ink)'], ['natural', 'Natural (most brushes)'], ['loose', 'Loose (charcoal, pastel)'],
+      ['wild', 'Wild (texture, foliage)'], ['spray', 'Spray (splatter, dust)']];
+    const RV = {
+      none: [{}, false], subtle: [{ Size: 10, Opacity: 10, Angle: 5 }, true], natural: [{ Size: 20, Roundness: 30, Scatter: 20, Angle: 20, Opacity: 10 }, true],
+      loose: [{ Size: 30, Roundness: 40, Scatter: 35, Angle: 45, Opacity: 20, 'Grain depth': 30 }, true],
+      wild: [{ Size: 50, Roundness: 60, Scatter: 60, Angle: 100, Opacity: 30, 'Dab count': 30 }, true],
+      spray: [{ Size: 60, Scatter: 90, Angle: 100, Opacity: 40, 'Dab count': 50 }, true] };
+    sec.appendChild(kv('Preset', sel(RP, '', (x) => { if (x === 'original') original(); else if (RV[x]) apply(RV[x][0], RV[x][1]); }), 'Starting points for randomness. Each sets all values below and paints a test stroke; adjust from there.'));
+    const RH = { Size: 'Bigger or smaller dabs.', Opacity: 'Lighter or darker dabs.', Flow: 'More or less paint per dab.', Angle: 'Turns each dab. 100 = any angle; keep low on pencils and flat tips.', Roundness: 'Squashes dabs by different amounts.', 'Grain depth': 'Paper bites each dab differently (needs texture on).', Scatter: 'Dabs jump off the line.', 'Dab count': 'More or fewer dabs per step.', Colour: 'Mixes foreground and background colour per dab.' };
+    ASPECTS.forEach(([label, keys, sw]) => {
+      if (!bpAll && !['Size', 'Opacity', 'Angle', 'Roundness', 'Scatter'].includes(label)) { const [, v] = jit(keys); if (!(v && pct(v.jitter) > 0)) return; }
+      const [, v] = jit(keys);
+      sec.appendChild(kv(label + ' %', num(pct(v && v.jitter) || 0, (x) => setJ(keys, sw, x), { min: 0, max: 100 }), RH[label]));
+    });
+    if ('flipX' in o) sec.appendChild(kv('Flip X', tog(!!o.flipX, (x) => setOpt({ flipX: x, useTipDynamics: true })), 'Mirrors dabs left to right at random: breaks repeats without turning the tip.'));
+    if ('flipY' in o) sec.appendChild(kv('Flip Y', tog(!!o.flipY, (x) => setOpt({ flipY: x, useTipDynamics: true })), 'Mirrors dabs top to bottom at random.'));
+    if (b.spacing && typeof b.spacing === 'object') sec.appendChild(kv('Spacing %', num(b.spacing._value, (x) => setOpt({ brush: Object.assign({}, b, { spacing: { _unit: b.spacing._unit || 'percentUnit', _value: Math.max(1, x) } }) }, 'Spacing')), 'Gap between dabs. Low = dabs blend into one texture and repeats show less.'));
   }));
   // 2. pressure curve (applied by the pen relay before Photoshop sees the pressure; per brush)
   body.appendChild(section('curve', 'Pressure curve', (sec) => buildCurve(sec)));
@@ -1224,6 +1248,7 @@ async function devHook() {
           const n = !a.sel ? null : a.text ? Array.from(document.querySelectorAll(a.sel)).find((x) => x.textContent.includes(a.text)) : document.querySelector(a.sel);
           if (a.click) { if (n.onclick) await n.onclick({ stopPropagation() {}, target: n }); else n.click(); }
           if ('top' in a) n.scrollTop = a.top;
+          if ('value' in a) { n.value = a.value; if (n.onchange) await n.onchange({ target: n }); n.dispatchEvent(new Event('change')); }
           if (a.panel) await require('uxp').entrypoints.getPanel(a.panel).show();
           if (a.wait) await new Promise((r) => setTimeout(r, a.wait));
           if (a.eval) out = String(await (new Function('return (async () => {' + a.eval + '})()'))());
