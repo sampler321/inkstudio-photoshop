@@ -419,7 +419,7 @@ async function useBrush(p, f, b, cell) {
     document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x.dataset.tool === 'paintbrushTool'));
     syncRail && syncRail();
     status(`${b}, ${px} px`);
-    renderInspector();
+    renderInspector(); renderBrushPanel(); writeCurveForRelay(curveFor(lastBrushKey));
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
     store.set('recent', recent);
   } catch (e) { status('Could not select: ' + (e.message || e)); log('useBrush', b, e); throw e; }
@@ -505,6 +505,141 @@ async function renderInspector() {
   body.appendChild(lv);
 }
 
+
+/* ---------- Brush panel: every brush setting the pen can touch, editable ---------- */
+const ASPECTS = [   // [label, key candidates, switch that must be on for it to work]
+  ['Size', ['$szVr'], 'useTipDynamics'], ['Opacity', ['$opVr'], 'usePaintDynamics'], ['Flow', ['$prVr'], 'usePaintDynamics'],
+  ['Angle', ['angleDynamics'], 'useTipDynamics'], ['Roundness', ['roundnessDynamics'], 'useTipDynamics'],
+  ['Grain depth', ['textureDepthDynamics'], 'useTexture'], ['Scatter', ['scatterDynamics', '$scatterDynamics'], 'useScatter'],
+  ['Dab count', ['countDynamics', '$countDynamics'], 'useScatter'], ['Colour', ['$clVr', 'clVr'], 'useColorDynamics'],
+];
+const CONTROLS = [[0, 'Off'], [2, 'Pressure'], [3, 'Tilt'], [7, 'Direction'], [6, 'Initial direction'], [5, 'Rotation'], [1, 'Fade'], [4, 'Stylus wheel']];
+const pct = (v) => (v && typeof v === 'object' ? v._value : v);
+const P = (x) => ({ _unit: 'percentUnit', _value: x });
+let bpOpen = store.get('bpOpen', { pen: true, curve: true, tip: false, pose: false, paint: false });
+function section(id, title, build) {
+  const wrap = el('div', 'bpSec');
+  const head = el('div', 'bpSecHead'); head.appendChild(el('span', 'caret', bpOpen[id] ? '▾' : '▸')); head.appendChild(el('span', '', title));
+  head.onclick = () => { bpOpen[id] = !bpOpen[id]; store.set('bpOpen', bpOpen); renderBrushPanel(); };
+  wrap.appendChild(head);
+  if (bpOpen[id]) { const body = el('div', 'bpSecBody'); build(body); wrap.appendChild(body); }
+  return wrap;
+}
+function num(value, onSet, opts = {}) {
+  const i = document.createElement('input'); i.type = 'number'; i.className = 'bpNum'; i.value = value == null ? '' : Math.round(value * 100) / 100;
+  if (opts.min != null) i.min = opts.min; if (opts.max != null) i.max = opts.max; i.title = opts.title || '';
+  i.addEventListener('change', () => onSet(parseFloat(i.value)));
+  return i;
+}
+function sel(options, value, onSet) {
+  const s = document.createElement('select'); s.className = 'bpSel';
+  options.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v == value) o.selected = true; s.appendChild(o); });
+  s.addEventListener('change', () => onSet(s.value));
+  return s;
+}
+function tog(on, onSet, label) {
+  const t = el('div', 'b bpTog' + (on ? ' on' : ''), label || (on ? 'on' : 'off'));
+  t.onclick = () => onSet(!on);
+  return t;
+}
+async function setOpt(patch, name) { try { await ps_.toolOpts(patch, name || 'Brush setting'); } catch (e) { log('bp', e); status('Photoshop refused: ' + (e.message || e)); } renderBrushPanel(); }
+async function renderBrushPanel() {
+  const body = $('#bpBody'); if (!body) return;
+  let o; try { o = await nativeOptions(); } catch (e) { return; }
+  const b = o.brush || {};
+  $('#bpName').textContent = (currentBrush && currentBrush.name) || b.name || 'Current brush';
+  body.innerHTML = '';
+  // 1. pen -> brush matrix
+  body.appendChild(section('pen', 'Pen controls', (sec) => {
+    const hdr = el('div', 'bpRow bpHdr'); ['', 'driven by', 'random', 'min'].forEach((t) => hdr.appendChild(el('span', 'bpCell', t))); sec.appendChild(hdr);
+    ASPECTS.forEach(([label, keys, sw]) => {
+      const k = keys.find((x) => o[x] && typeof o[x] === 'object') || keys[0];
+      const v = o[k] || { _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) };
+      const active = o[sw] !== false;
+      const row = el('div', 'bpRow' + (active ? '' : ' dim'));
+      row.appendChild(el('span', 'bpCell bpLabel', label));
+      const write = (chg) => setOpt(Object.assign({ [k]: Object.assign({ _obj: '$brVr', $bVTy: 0, $fStp: 25, jitter: P(0), minimum: P(0) }, v, chg) }, { [sw]: true }), label);
+      row.appendChild(sel(CONTROLS, v.$bVTy || 0, (c) => write({ $bVTy: +c })));
+      row.appendChild(num(pct(v.jitter), (x) => write({ jitter: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Random amount %' }));
+      row.appendChild(num(pct(v.minimum), (x) => write({ minimum: P(Math.max(0, Math.min(100, x))) }), { min: 0, max: 100, title: 'Lowest value at the lightest pressure / tilt %' }));
+      sec.appendChild(row);
+    });
+    if (o.minimumDiameter) sec.appendChild(kv('Smallest size %', num(pct(o.minimumDiameter), (x) => setOpt({ minimumDiameter: P(x) }))));
+    if (o.minimumRoundness) sec.appendChild(kv('Flattest roundness %', num(pct(o.minimumRoundness), (x) => setOpt({ minimumRoundness: P(x) }))));
+    if (o.tiltScale) sec.appendChild(kv('Tilt scale %', num(pct(o.tiltScale), (x) => setOpt({ tiltScale: P(x) }))));
+    if ('brushProjection' in o) sec.appendChild(kv('Brush projection (tilt shapes the tip)', tog(o.brushProjection, (x) => setOpt({ brushProjection: x }))));
+    sec.appendChild(kv('Top-bar pressure for size', tog(o.usePressureOverridesSize, (x) => setOpt({ usePressureOverridesSize: x }))));
+    sec.appendChild(kv('Top-bar pressure for opacity', tog(o.usePressureOverridesOpacity, (x) => setOpt({ usePressureOverridesOpacity: x }))));
+  }));
+  // 2. pressure curve (applied by the pen relay before Photoshop sees the pressure; per brush)
+  body.appendChild(section('curve', 'Pressure curve', (sec) => buildCurve(sec)));
+  // 3. tip
+  body.appendChild(section('tip', 'Tip: ' + (TIP[b._obj] || b._obj || ''), (sec) => {
+    const skip = new Set(['_obj', 'name', 'sampledData', 'interfaceIconFrameDimmed', 'flipX', 'flipY']);
+    Object.keys(b).filter((k) => !skip.has(k)).forEach((k) => {
+      const v = b[k];
+      const put = (val) => setOpt({ brush: Object.assign({}, b, { [k]: val }) }, 'Tip');
+      if (typeof v === 'boolean') sec.appendChild(kv(k, tog(v, (x) => put(x))));
+      else if (typeof v === 'number') sec.appendChild(kv(k, num(v, (x) => put(x))));
+      else if (v && typeof v === 'object' && '_value' in v) {
+        const frac = v._unit === 'percentUnit' && b._obj === 'dBrush' && Math.abs(v._value) <= 1.5;   // bristle values are stored as fractions
+        sec.appendChild(kv(k + (v._unit === 'pixelsUnit' ? ' px' : v._unit === 'angleUnit' ? ' °' : ' %'),
+          num(frac ? v._value * 100 : v._value, (x) => put({ _unit: v._unit, _value: frac ? x / 100 : x }))));
+      }
+    });
+    if (b._obj === 'dBrush') sec.appendChild(el('div', 'bpNote', 'Bristle tips react to pressure and tilt through their physics: more pressure presses more bristles onto the paper. Use the pose pressure override to fix it.'));
+  }));
+  // 4. brush pose
+  body.appendChild(section('pose', 'Brush pose (override the pen)', (sec) => {
+    sec.appendChild(kv('Brush pose', tog(o.useBrushPose, (x) => setOpt({ useBrushPose: x }))));
+    [['Tilt X', 'overridePoseTiltX', 'brushPoseTiltX'], ['Tilt Y', 'overridePoseTiltY', 'brushPoseTiltY'], ['Rotation', 'overridePoseAngle', 'brushPoseAngle'], ['Pressure', 'overridePosePressure', 'brushPosePressure']].forEach(([lab, ov, val]) => {
+      const row = el('div', 'bpKV'); row.appendChild(el('span', 'bpKey', 'Override ' + lab));
+      row.appendChild(tog(!!o[ov], (x) => setOpt({ useBrushPose: true, [ov]: x })));
+      row.appendChild(num(pct(o[val]), (x) => setOpt({ useBrushPose: true, [val]: (o[val] && o[val]._unit) ? { _unit: o[val]._unit, _value: x } : (lab === 'Pressure' ? P(x) : x) })));
+      sec.appendChild(row);
+    });
+  }));
+  // 5. tool & paint (what presets carry as tool settings)
+  body.appendChild(section('paint', 'Tool & paint', (sec) => {
+    sec.appendChild(kv('Tool', el('span', 'bpVal', activeTool)));
+    sec.appendChild(kv('Opacity %', num(o.opacity, (x) => setOpt({ opacity: Math.round(x) }))));
+    if ('flow' in o) sec.appendChild(kv('Flow %', num(o.flow, (x) => setOpt({ flow: Math.round(x) }))));
+    if (o.mode) sec.appendChild(kv('Mode', sel([['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['softLight', 'Soft light'], ['darken', 'Darken'], ['lighten', 'Lighten'], ['color', 'Colour'], ['luminosity', 'Luminosity'], ['dissolve', 'Dissolve'], ['behind', 'Behind']], o.mode._value, (x) => setOpt({ mode: { _enum: 'blendMode', _value: x } }))));
+    [['Build-up (airbrush)', 'repeat'], ['Wet edges', 'wetEdges'], ['Noise', 'noise'], ['Texture', 'useTexture'], ['Protect texture', 'protectTexture'], ['Scatter', 'useScatter'], ['Colour dynamics', 'useColorDynamics'], ['Shape dynamics', 'useTipDynamics'], ['Transfer', 'usePaintDynamics']].forEach(([lab, k]) => { if (k in o) sec.appendChild(kv(lab, tog(o[k], (x) => setOpt({ [k]: x })))); });
+    if (o.dualBrush) sec.appendChild(kv('Dual brush', tog(o.dualBrush.useDualBrush, (x) => setOpt({ dualBrush: Object.assign({}, o.dualBrush, { useDualBrush: x }) }))));
+    if (o.useTexture) {
+      if (o.textureDepth) sec.appendChild(kv('Grain depth %', num(pct(o.textureDepth), (x) => setOpt({ textureDepth: P(x) }))));
+      if (o.textureScale) sec.appendChild(kv('Grain scale %', num(pct(o.textureScale), (x) => setOpt({ textureScale: P(x) }))));
+      if (o.textureBlendMode) sec.appendChild(kv('Grain mode', sel([['multiply', 'Multiply'], ['subtract', 'Subtract'], ['darken', 'Darken'], ['overlay', 'Overlay'], ['colorDodge', 'Colour dodge'], ['colorBurn', 'Colour burn'], ['linearBurn', 'Linear burn'], ['hardMix', 'Hard mix'], ['linearHeight', 'Linear height'], ['height', 'Height']], o.textureBlendMode._value, (x) => setOpt({ textureBlendMode: { _enum: 'blendMode', _value: x } }))));
+    }
+    if ('smoothingValue' in o) sec.appendChild(kv('Smoothing %', num(o.smoothingValue, (x) => setOpt({ smoothingValue: Math.round(x) }))));
+    ['wetness', 'dryness', 'mix'].forEach((k) => { if (k in o) sec.appendChild(kv(k === 'dryness' ? 'Load %' : k[0].toUpperCase() + k.slice(1) + ' %', num(o[k], (x) => setOpt({ [k]: Math.round(x) })))); });
+  }));
+}
+function kv(label, ctl) { const r = el('div', 'bpKV'); r.appendChild(el('span', 'bpKey', label)); r.appendChild(ctl); return r; }
+/* pressure curve: in -> out with a floor, a ceiling and a bend; saved per brush, read by the pen relay */
+async function curveFile() { const d = await lfs.getDataFolder(); return d; }
+function curveFor(k) { return Object.assign({ inLo: 0, inHi: 100, outLo: 0, outHi: 100, bend: 0 }, (store.get('curves', {})[k || 'default']) || {}); }
+const curveAt = (c, p) => { const t = Math.max(0, Math.min(1, (p * 100 - c.inLo) / Math.max(1, c.inHi - c.inLo))); const g = Math.pow(2, -c.bend / 25); return (c.outLo + (c.outHi - c.outLo) * Math.pow(t, g)) / 100; };
+async function writeCurveForRelay(c) {
+  try { const d = await curveFile(); const f = await d.createFile('pressure-curve.json', { overwrite: true }); await f.write(JSON.stringify(c)); } catch (e) { log('curve', e); }
+}
+function buildCurve(sec) {
+  const k = lastBrushKey || 'default'; const c = curveFor(k);
+  const graph = el('div', 'curve');
+  for (let i = 0; i <= 24; i++) { const x = i / 24; const y = curveAt(c, x); const d = el('div', 'cdot'); d.style.left = (x * 100) + '%'; d.style.bottom = (y * 100) + '%'; graph.appendChild(d); }
+  const diag = el('div', 'cdiag'); graph.appendChild(diag);
+  sec.appendChild(graph);
+  const save = (chg) => { const all = store.get('curves', {}); all[k] = Object.assign(c, chg); store.set('curves', all); writeCurveForRelay(all[k]); renderBrushPanel(); };
+  sec.appendChild(kv('Bend (soft − / hard +)', num(c.bend, (x) => save({ bend: Math.max(-100, Math.min(100, x)) }), { min: -100, max: 100 })));
+  sec.appendChild(kv('Pen starts at %', num(c.inLo, (x) => save({ inLo: x }))));
+  sec.appendChild(kv('Full at %', num(c.inHi, (x) => save({ inHi: x }))));
+  sec.appendChild(kv('Lightest output %', num(c.outLo, (x) => save({ outLo: x }))));
+  sec.appendChild(kv('Strongest output %', num(c.outHi, (x) => save({ outHi: x }))));
+  const lin = el('div', 'b bpReset', 'Linear'); lin.onclick = () => save({ inLo: 0, inHi: 100, outLo: 0, outHi: 100, bend: 0 }); sec.appendChild(lin);
+  sec.appendChild(el('div', 'bpNote', 'Photoshop maps pressure linearly. This curve reshapes the pen pressure before Photoshop sees it, for this brush.'));
+}
+
 /* ---------- library wiring ---------- */
 function initLibrary() {
   document.querySelectorAll('#tabs .b').forEach((b) => b.onclick = () => { tab = b.dataset.tab; setTab(); render(); });
@@ -515,6 +650,7 @@ function initLibrary() {
   const setView = (z) => { applyZoom(z); store.set('zoom', +z); vbtns.forEach((b) => b.classList.toggle('on', b.dataset.z == z)); };
   setView(store.get('zoom', 0));
   vbtns.forEach((b) => b.onclick = () => { setView(+b.dataset.z); render(); });
+  $('#bpRefresh').onclick = () => renderBrushPanel();
   $('#inspHead').onclick = () => { inspOpen = !inspOpen; store.set('inspOpen', inspOpen); renderInspector(); };
   const pick = async () => { const f = await lfs.getFolder(); if (f) loadLibrary(f.nativePath); };
   $('#pick').onclick = pick; $('#settings').onclick = pick;
@@ -679,7 +815,7 @@ function initRail() {
       if (o && o.opacity != null && activeTool !== 'wetBrushTool') { op.value = o.opacity; opV.textContent = Math.round(o.opacity) + '%'; }
     } catch (e) {}
   };
-  action.addNotificationListener(['set', 'select'], () => { syncRail(); clearTimeout(inspT); inspT = setTimeout(renderInspector, 250); });
+  action.addNotificationListener(['set', 'select'], () => { syncRail(); clearTimeout(inspT); inspT = setTimeout(() => { renderInspector(); renderBrushPanel(); }, 250); });
 }
 
 
@@ -717,6 +853,6 @@ const mount = (id) => ({
     if (part && part.parentNode !== node && node.appendChild) node.appendChild(part);
   },
 });
-try { entrypoints.setup({ panels: { library: mount('library'), rail: mount('rail') } }); log('setup ok'); } catch (e) { log('setup', e); }
+try { entrypoints.setup({ panels: { library: mount('library'), rail: mount('rail'), brushpanel: mount('brushpanel') } }); log('setup ok'); } catch (e) { log('setup', e); }
 try { initLibrary(); log('library ok'); } catch (e) { log('initLibrary', e); }
 try { initRail(); log('rail ok'); } catch (e) { log('initRail', e); }
