@@ -94,20 +94,27 @@ async function ensurePaper() {
   store.set('paperDefined', true); paperReady = true;
 }
 /* media behaviour: which Photoshop painting features a medium switches on (all visible as rail toggles) */
-const MEDIUM_FX = {
-  'Pencil':            { paper: true,  wet: false, layer: false },
-  'Charcoal & pastel': { paper: true,  wet: false, layer: false },
-  'Watercolour':       { paper: true,  wet: true,  layer: true },
-  'Marker':            { paper: false, wet: false, layer: true },
+const MEDIUM_FX = {   // paper: texture mode + depth tuned by test strokes (subtract reads as graphite on tooth)
+  'Pencil':            { paper: true,  wet: false, layer: false, grain: ['subtract', 100], px: 30 },
+  'Charcoal & pastel': { paper: true,  wet: false, layer: false, grain: ['multiply', 55], px: 60 },
+  'Watercolour':       { paper: true,  wet: true,  layer: true,  grain: ['subtract', 50], px: 160 },
+  'Marker':            { paper: false, wet: false, layer: true,  px: 50 },
+  'Ink & pen':         { paper: false, wet: false, layer: false, px: 16 },
 };
 function fxPatch(fx) {
-  const p = { wetEdges: !!fx.wet, mode: { _enum: 'blendMode', _value: fx.layer ? 'multiply' : 'normal' }, useTexture: !!fx.paper };
+  const p = { wetEdges: !!fx.wet, mode: { _enum: 'blendMode', _value: fx.layer ? 'multiply' : 'normal' } };
+  if (!fx.own) p.useTexture = !!fx.paper;   // a brush with its own grain keeps it unless paper is switched on explicitly
   if (fx.paper) Object.assign(p, {
-    texture: { _obj: 'pattern', name: 'InkStudio Paper' }, textureScale: { _unit: 'percentUnit', _value: 100 }, textureBlendMode: { _enum: 'blendMode', _value: 'height' },
-    textureDepth: { _unit: 'percentUnit', _value: 70 }, minimumDepth: { _unit: 'percentUnit', _value: 15 },
+    useTexture: true, invertTexture: false,
+    texture: { _obj: 'pattern', name: 'InkStudio Paper' }, textureScale: { _unit: 'percentUnit', _value: 100 }, textureBlendMode: { _enum: 'blendMode', _value: (fx.grain || ['subtract'])[0] },
+    textureDepth: { _unit: 'percentUnit', _value: (fx.grain || [0, 80])[1] }, minimumDepth: { _unit: 'percentUnit', _value: 15 },
     textureDepthDynamics: { _obj: 'brVr', bVTy: 2, fStp: 25, jitter: { _unit: 'percentUnit', _value: 0 }, minimum: { _unit: 'percentUnit', _value: 15 } },
   });
   return p;
+}
+async function nativeOptions() {
+  const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'currentToolOptions' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
+  return (r[0] && r[0].currentToolOptions) || {};
 }
 async function currentTool() {
   const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'tool' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
@@ -285,10 +292,15 @@ async function useBrush(p, f, b, cell) {
     await ps_.brush(b);
     // Envato tips are huge (often 2000-5000 px); start at the size last used with this brush, else 120 px
     const sizes = store.get('sizes', {});
-    const px = sizes[key(p, f, b)] || 120;
+    const med = MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {};
+    const px = sizes[key(p, f, b)] || med.px || 120;
     await ps_.size(px);
     applyPressure && await applyPressure();
-    const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {}, store.get('fx', {})[key(p, f, b)] || {});
+    const native = await nativeOptions();
+    const fx = Object.assign({ paper: false, wet: false, layer: false }, MEDIUM_FX[p.media.find((m) => MEDIUM_FX[m])] || {});
+    if (native.useTexture) { fx.paper = false; fx.own = true; }       // maker's grain wins
+    if (native.wetEdges) fx.wet = true;
+    Object.assign(fx, store.get('fx', {})[key(p, f, b)] || {});
     setFx && await setFx(fx);
     lastBrushKey = key(p, f, b);
     currentBrush = { name: b, px };
@@ -381,14 +393,23 @@ function initRail() {
   applyPressure = applyP;
   let fxNow = { paper: false, wet: false, layer: false };
   const fxEls = { paper: $('#fxPaper'), wet: $('#fxWet'), layer: $('#fxLayer') };
-  const paintFx = () => Object.keys(fxEls).forEach((k) => fxEls[k].classList.toggle('on', !!fxNow[k]));
+  const paintFx = () => {
+    Object.keys(fxEls).forEach((k) => fxEls[k].classList.toggle('on', !!fxNow[k]));
+    fxEls.paper.classList.toggle('own', !!fxNow.own && !fxNow.paper);
+    fxEls.paper.textContent = fxNow.own && !fxNow.paper ? 'Paper: own' : 'Paper';
+    fxEls.paper.title = fxNow.own && !fxNow.paper ? "This brush brings its own paper grain. Tap to use InkStudio paper instead." : 'Paper grain: texture shows through';
+  };
   setFx = async (fx) => {
     fxNow = fx; paintFx();
     try { if (fx.paper) await ensurePaper(); await ps_.toolOpts(fxPatch(fx), 'Media'); } catch (e) { log('fx', e); }
   };
-  Object.keys(fxEls).forEach((k) => fxEls[k].onclick = () => {
+  Object.keys(fxEls).forEach((k) => fxEls[k].onclick = async () => {
     const fx = Object.assign({}, fxNow, { [k]: !fxNow[k] });
-    if (lastBrushKey) { const m = store.get('fx', {}); m[lastBrushKey] = fx; store.set('fx', m); }   // remembered per brush
+    if (lastBrushKey) { const m = store.get('fx', {}); m[lastBrushKey] = { paper: fx.paper, wet: fx.wet, layer: fx.layer }; store.set('fx', m); }   // remembered per brush
+    if (k === 'paper' && fxNow.paper && fxNow.own && currentBrush) {
+      // back to the maker's grain: re-select the preset, then re-apply size and pressure
+      try { await ps_.brush(currentBrush.name, await currentTool()); await ps_.size(currentBrush.px); applyPressure && await applyPressure(); } catch (e) { log('restore grain', e); }
+    }
     setFx(fx);
   });
   paintFx();
@@ -414,6 +435,27 @@ function initRail() {
   };
   action.addNotificationListener(['set', 'select'], () => syncRail());
 }
+
+
+/* dev hook: <plugin data>/cmd.json -> runs one command, answer in cmd.out (lets tests drive the panel without the mouse) */
+async function devHook() {
+  try {
+    const d = await lfs.getDataFolder();
+    const f = await d.getEntry('cmd.json').catch(() => null);
+    if (!f) return;
+    const c = JSON.parse(await f.read()); await f.delete();
+    let out = 'ok';
+    try {
+      if (c.op === 'select') {
+        const p = LIB.packs.find((x) => x.id === c.pack); const fl = p.files[c.file || 0];
+        await useBrush(p, fl, c.brush || fl.brushes[0], null);
+      } else if (c.op === 'fx') { await setFx(c.fx); }
+      else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
+    } catch (e) { out = 'ERR ' + (e.stack || e); }
+    const o = await d.createFile('cmd.out', { overwrite: true }); await o.write(out + '\n' + LOG.slice(-5).join('\n'));
+  } catch (e) {}
+}
+setInterval(devHook, 700);
 
 /* ---------- panel entrypoints ---------- */
 const mount = (id) => ({

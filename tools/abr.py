@@ -41,12 +41,15 @@ def samples(b, sub, off, ln):
     return out
 
 def names(b, off, ln):
-    d = b[off:off+ln]; res = []
+    """Preset names only: a preset's 'Nm  ' key directly follows its 'brushPreset' class tag; nested tip
+    names ('Sampled Brush 3', '01.tif', '1') do not. Falls back to every name for older files."""
+    d = b[off:off+ln]; res = []; every = []
     for m in re.finditer(rb'Nm  TEXT(....)', d):
         n = struct.unpack('>I', m.group(1))[0]
         s = d[m.end():m.end()+2*n].decode('utf-16-be', 'ignore').rstrip('\0')
-        res.append(s)
-    return res
+        every.append(s)
+        if b'brushPreset' in d[max(0, m.start()-24):m.start()]: res.append(s)
+    return res or list(dict.fromkeys(every))
 
 def read(path, with_images=True):
     b = open(path, 'rb').read()

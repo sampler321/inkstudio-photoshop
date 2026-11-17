@@ -70,3 +70,4 @@ body { background: var(--bg); color: var(--fg); font-size: 12px; margin: 0; }
 .rail .ptog { font-size: 9px !important; height: 22px !important; line-height: 22px !important; color: var(--mut); }
 .rail .ptog.on { color: #fff; background: var(--hi); border-color: var(--hi); }
 .rail .tool.on { background: var(--hi); border-color: var(--hi); color: #fff; }
+.rail .ptog.own { color: var(--fg); border-style: dashed; }
