@@ -15,8 +15,8 @@ if (typeof LOAD_PATH != 'undefined') {
 var ru = app.preferences.rulerUnits; app.preferences.rulerUnits = Units.PIXELS;
 var keepDoc = app.documents.length ? app.activeDocument : null;
 var keepFg = app.foregroundColor;
-var W = 960, H = 240, K = 72 / 144;
-var doc = app.documents.add(W, H, 144, 'inkstudio-previews', NewDocumentMode.RGB, DocumentFill.WHITE);
+var W = 480, H = 120, K = 1;   // render straight at preview size (same look as 960x240 scaled down)
+var doc = app.documents.add(W, H, 72, 'inkstudio-previews', NewDocumentMode.RGB, DocumentFill.WHITE);
 var paint = doc.artLayers.add();
 function opts() { var r = new ActionReference(); r.putProperty(s('property'), s('currentToolOptions')); r.putEnumerated(s('application'), s('ordinal'), s('targetEnum')); return executeActionGet(r).getObjectValue(s('currentToolOptions')); }
 function setOpts(t) { var d = new ActionDescriptor(), r = new ActionReference(); r.putClass(s('paintbrushTool')); d.putReference(c('null'), r); d.putObject(s('to'), s('currentToolOptions'), t); executeAction(s('set'), d, DialogModes.NO); }
@@ -39,7 +39,7 @@ for (var b = 0; b < BRUSHES.length; b++) {
     selectBrush(BRUSHES[b]);
     var o = opts();
     var br = o.getObjectValue(s('brush'));
-    var want = typeof SIZE != 'undefined' ? SIZE : 36;
+    var want = typeof SIZE != 'undefined' ? SIZE : 18;
     br.putUnitDouble(s('diameter'), s('pixelsUnit'), Math.min(want, br.getUnitDoubleValue(s('diameter'))) || want);
     o.putObject(s('brush'), o.getObjectType(s('brush')), br);
     o.putBoolean(s('usePressureOverridesSize'), true); o.putInteger(s('opacity'), 100);
@@ -54,9 +54,7 @@ for (var b = 0; b < BRUSHES.length; b++) {
     executeAction(c('Strk'), d, DialogModes.NO);
     tp.remove();
     var png = new PNGSaveOptions(); png.compression = 9;
-    var dup = doc.duplicate('p', true); dup.resizeImage(UnitValue(480, 'px'), null, 72, ResampleMethod.BICUBIC);
-    dup.saveAs(new File(OUT_DIR + '/' + b + '.png'), png, true); dup.close(SaveOptions.DONOTSAVECHANGES);
-    app.activeDocument = doc;
+    doc.saveAs(new File(OUT_DIR + '/' + b + '.png'), png, true);
     ok++;
   } catch (e) { failed.push(BRUSHES[b]); try { for (var j = doc.pathItems.length - 1; j >= 0; j--) doc.pathItems[j].remove(); } catch (x) {} }
 }
