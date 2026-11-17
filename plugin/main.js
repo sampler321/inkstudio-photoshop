@@ -197,7 +197,12 @@ function lazyImg(img, path) { imgUrl(path).then((u) => { img.src = u; }); }
 async function loadLibrary(root) {
   try {
     const cat = JSON.parse(await readText(root + '/.inkstudio/catalog.json'));
-    cat.packs.forEach((p) => { p.media = packMedia(p); });   // brush names come exact from the catalogue
+    cat.packs.forEach((p) => {
+      p.media = packMedia(p);
+      // marketing counts in titles ("100 Watercolor ...") rarely match the real brushes: show the name, real count below
+      p.name = (p.title || p.id).replace(/^\s*\d+[+]?\s*[-–:]?\s*/, '').replace(/^(CM|CM\s*\d+)\s*-\s*/i, '') || p.title;
+    });
+    cat.packs.sort((a, b) => a.name.localeCompare(b.name));
     LIB = { root, packs: cat.packs.filter((p) => p.count > 0) };
     store.set('root', root);
     const n = LIB.packs.reduce((a, p) => a + p.count, 0);
@@ -259,7 +264,8 @@ function packRow(p) {
   const thumb = el('img', 'cover');
   if (p.covers && p.covers[0]) lazyImg(thumb, LIB.root + '/.inkstudio/' + p.covers[0]);
   const meta = el('div', 'meta');
-  meta.appendChild(el('div', 'title', p.title));
+  meta.appendChild(el('div', 'title', p.name));
+  meta.title = p.title;
   const sub = el('div', 'sub');
   sub.appendChild(el('span', 'maker', p.author || 'Unknown maker'));
   sub.appendChild(el('span', 'count', `${p.count} brushes`));
