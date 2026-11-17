@@ -79,3 +79,4 @@ body { background: var(--bg); color: var(--fg); font-size: 12px; margin: 0; }
 .stroke.blank { background: #3a3a3a; }
 .sline { display: flex; align-items: center; justify-content: space-between; }
 .sline .name { font-size: 10px; }
+.stroke.tipOnly { object-fit: contain; padding: 4px 0; }

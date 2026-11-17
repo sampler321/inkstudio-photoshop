@@ -3,6 +3,9 @@ Usage: render_previews.py <library_dir> <pack_id> [<pack_id> ...]   (Photoshop m
 Writes <library>/.inkstudio/strokes/<pack>/<file#>-<brush#>.png and adds 'strokes' lists to catalog.json."""
 import sys, os, json, subprocess
 import time, re
+PER = 12   # previews per brush file; the rest show tip images
+for a in list(sys.argv):
+    if a.startswith('--per='): PER = int(a[6:]); sys.argv.remove(a)
 WHEN_IDLE = '--when-idle' in sys.argv; sys.argv = [a for a in sys.argv if a != '--when-idle']
 lib, ids = sys.argv[1], sys.argv[2:]
 def idle_seconds():
@@ -32,7 +35,7 @@ for p in sorted(cat['packs'], key=lambda p: order.get(p['id'], 1e9)):
     while WHEN_IDLE and idle_seconds() < 120: time.sleep(20)   # only while nobody is using the Mac
     for fi, f in enumerate(p['files']):
         out = os.path.join(inks, 'strokes', p['id'], str(fi)); os.makedirs(out, exist_ok=True)
-        pre = f"var BRUSHES={js(f['brushes'])}; var OUT_DIR={js(out)}; "
+        pre = f"var BRUSHES={js(f['brushes'][:PER])}; var OUT_DIR={js(out)}; "
         if not p.get('builtin'): pre += f"var LOAD_PATH={js(os.path.realpath(os.path.join(lib, f['file'])))}; "
         script = 'with timeout of 3600 seconds\ntell application id "com.adobe.Photoshop" to do javascript ' + js(pre) + ' & (read POSIX file ' + js(jsx) + ')\nend timeout'
         r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)

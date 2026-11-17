@@ -293,7 +293,9 @@ function packBody(p) {
       shown.forEach((b, i) => {
         const row = el('div', 'srow');
         const im = el('img', 'stroke');
-        if (f.strokes[i]) lazyImg(im, LIB.root + '/.inkstudio/' + f.strokes[i]); else im.classList.add('blank');
+        if (f.strokes[i]) lazyImg(im, LIB.root + '/.inkstudio/' + f.strokes[i]);
+        else if (f.tips[i]) { lazyImg(im, LIB.root + '/.inkstudio/' + f.tips[i]); im.classList.add('tipOnly'); }   // no painted preview yet: show the tip
+        else im.classList.add('blank');
         row.appendChild(im);
         const line = el('div', 'sline'); line.appendChild(el('div', 'name', b)); line.appendChild(star(key(p, f, b)));
         row.appendChild(line);
