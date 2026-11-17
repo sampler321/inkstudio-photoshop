@@ -317,6 +317,29 @@ function packBody(p) {
   });
   return body;
 }
+
+/* which pack owns each brush name the panel loaded: keeps "1", "Pencil 1" etc. from picking another pack's brush */
+let owner = store.get('owner', {});
+const builtinNames = () => new Set((LIB ? LIB.packs : []).filter((x) => x.builtin).flatMap((x) => x.files.flatMap((f) => f.brushes)));
+async function presetNames() {
+  const r = await action.batchPlay([{ _obj: 'get', _target: [{ _property: 'presetManager' }, { _ref: 'application', _enum: 'ordinal', _value: 'targetEnum' }] }], {});
+  const pm = r[0] && r[0].presetManager; const br = pm && pm.find((x) => x._obj === 'brushClass' || x._obj === 'brush') || (pm && pm[0]);
+  return (br && br.name) || [];
+}
+async function loadPack(p, f, path) {
+  const have = await presetNames();
+  const mine = new Set(f.brushes.map((b) => b.replace(/\.(jpe?g|png|tiff?|bmp|psd)$/i, '')));
+  // remove same-named presets that another pack loaded (they are reloaded on demand); never touch others
+  for (const n of have) {
+    if (mine.has(n) && owner[n] && owner[n] !== p.id && !builtinNames().has(n)) {
+      await modal('Tidy brushes', () => action.batchPlay([{ _obj: 'delete', _target: [{ _ref: 'brush', _name: n }] }], {}));
+    }
+  }
+  await ps_.loadAbr(path);
+  mine.forEach((n) => { owner[n] = p.id; });
+  store.set('owner', owner);
+}
+
 async function useBrush(p, f, b, cell) {
   document.querySelectorAll('.cell.sel, .srow.sel').forEach((c) => c.classList.remove('sel'));
   cell && cell.classList.add('sel');
@@ -325,10 +348,12 @@ async function useBrush(p, f, b, cell) {
     // select first; load the pack only if Photoshop doesn't have the brush (presets can be removed outside the panel)
     const names = [b, b.replace(/\.(jpe?g|png|tiff?|bmp|psd)$/i, '')];
     const trySelect = async () => { for (const n of names) { try { await ps_.brush(n); return true; } catch (e) {} } return false; };
-    if (!(await trySelect())) {
+    const clean = names[1];
+    const ours = p.builtin || owner[clean] === p.id;
+    if (!ours || !(await trySelect())) {
       if (p.builtin) throw new Error('not in Photoshop: ' + b);
       status(`Loading ${p.title}…`);
-      await ps_.loadAbr(path);
+      await loadPack(p, f, path);
       if (!(await trySelect())) throw new Error('brush not found after loading: ' + b);
     }
     // Envato tips are huge (often 2000-5000 px); start at the size last used with this brush, else 120 px
@@ -504,6 +529,7 @@ async function devHook() {
         await useBrush(p, fl, c.brush || fl.brushes[0], null).catch((e) => { out = 'ERR ' + (e.message || e); });
       } else if (c.op === 'fx') { await setFx(c.fx); }
       else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
+      else if (c.op === 'names') { const n = await presetNames(); out = n.length + ' ' + JSON.stringify(n.slice(-5)); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
     } catch (e) { out = 'ERR ' + (e.stack || e); }
     const o = await d.createFile('cmd.out', { overwrite: true }); await o.write(out + '\n' + LOG.slice(-5).join('\n'));
