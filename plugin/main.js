@@ -165,6 +165,8 @@ let recent = store.get('recent', []);
 let tab = 'media', media = null, query = '';
 let lastBrushKey = null, syncRail = null, applyPressure = null, currentBrush = null, setFx = null, fxNowRef = () => ({});
 const open = new Set();
+const showAll = new Set();
+const upTo = (n, cls) => { while (n && !(n.classList && n.classList.contains(cls))) n = n.parentNode; return n; };
 
 function packMedia(p) {
   const hay = [p.title, (p.tags || []).join(' '), p.id].join(' ');
@@ -286,7 +288,9 @@ function packBody(p) {
     if (f.strokes && f.strokes.some(Boolean)) {
       // Procreate-style rows: a real stroke rendered by Photoshop with this brush, name underneath
       const list = el('div', 'strokes');
-      names.forEach((b, i) => {
+      const LIMIT = 48;   // big packs (up to 500 brushes): show a first page, the rest on request
+      const shown = showAll.has(p.id + f.file) ? names : names.slice(0, LIMIT);
+      shown.forEach((b, i) => {
         const row = el('div', 'srow');
         const im = el('img', 'stroke');
         if (f.strokes[i]) lazyImg(im, LIB.root + '/.inkstudio/' + f.strokes[i]); else im.classList.add('blank');
@@ -298,10 +302,16 @@ function packBody(p) {
         list.appendChild(row);
       });
       body.appendChild(list);
+      if (shown.length < names.length) {
+        const more = el('div', 'b link', `Show all ${names.length}`);
+        more.onclick = () => { showAll.add(p.id + f.file); upTo(more, 'pack').replaceWith(packRow(p)); };
+        body.appendChild(more);
+      }
       return;
     }
     const grid = el('div', 'grid');
-    names.forEach((b, i) => {
+    const shownT = showAll.has(p.id + f.file) ? names : names.slice(0, 60);
+    shownT.forEach((b, i) => {
       const cell = el('div', 'cell');
       const im = el('img', 'tip');
       const tip = f.tips[Math.min(i, f.tips.length - 1)];
@@ -314,6 +324,11 @@ function packBody(p) {
       grid.appendChild(cell);
     });
     body.appendChild(grid);
+    if (shownT.length < names.length) {
+      const more = el('div', 'b link', `Show all ${names.length}`);
+      more.onclick = () => { showAll.add(p.id + f.file); upTo(more, 'pack').replaceWith(packRow(p)); };
+      body.appendChild(more);
+    }
   });
   return body;
 }
