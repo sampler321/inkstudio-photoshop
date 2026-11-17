@@ -519,15 +519,15 @@ async function renderStrip() {
     const imaging = require('photoshop').imaging;
     stripUrl = await core.executeAsModal(async () => {
       const keep = app.activeDocument;
-      const W = 600, H = 150;
+      const W = 1200, H = 300;
       await action.batchPlay([{ _obj: 'make', new: { _obj: 'document', name: 'inkstudio-strip', width: { _unit: 'pixelsUnit', _value: W }, height: { _unit: 'pixelsUnit', _value: H }, resolution: { _unit: 'densityUnit', _value: 72 }, mode: { _class: 'RGBColorMode' }, fill: { _enum: 'fill', _value: 'white' } } }], {});
       const pts = []; for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push([W * (0.06 + 0.88 * t), H * (0.5 + 0.28 * Math.sin(t * Math.PI * 2))]); }
       await action.batchPlay([{ _obj: 'set', _target: [{ _ref: 'path', _property: 'workPath' }], to: { _obj: 'pathClass', pathComponents: [{ _obj: 'pathComponent', shapeOperation: { _enum: 'shapeOperation', _value: 'add' }, subpathListKey: [{ _obj: 'subpathsList', closedSubpath: false, points: pts.map(([x, y]) => ({ _obj: 'pathPoint', anchor: { _obj: 'paint', horizontal: { _unit: 'pixelsUnit', _value: x }, vertical: { _unit: 'pixelsUnit', _value: y } } })) }] }] } }], {});
       const tool = activeTool === 'wetBrushTool' ? 'wetBrushTool' : 'paintbrushTool';
       await action.batchPlay([{ _obj: 'stroke', _target: [{ _ref: 'path', _property: 'workPath' }], using: { _class: tool }, pressure: true }], {});
       const doc = app.activeDocument;
-      const px = await imaging.getPixels({ documentID: doc.id, targetSize: { width: 300 } });
-      const b64 = await imaging.encodeImageData({ imageData: px.imageData, base64: true });
+      const px = await imaging.getPixels({ documentID: doc.id, targetSize: { width: 600 } });
+      const b64 = await imaging.encodeImageData({ imageData: px.imageData, base64: true, quality: 95 });
       px.imageData.dispose();
       await doc.closeWithoutSaving();
       if (keep) app.activeDocument = keep;
@@ -559,7 +559,12 @@ async function applyFeel(id) {
     if ('brushAngle' in r) { tip.angle = { _unit: 'angleUnit', _value: r.brushAngle }; delete r.brushAngle; }
     if ('brushRoundness' in r) { tip.roundness = P(r.brushRoundness); delete r.brushRoundness; }
     if (tip.angle || tip.roundness) r.brush = tip;
-    Object.keys(r).forEach((k) => { if (!(k in o) && k[0] === '$') delete r[k]; });
+    Object.keys(r).forEach((k) => {
+      if (!(k in o) && k[0] === '$') { delete r[k]; return; }
+      // keep the maker's randomness (it is part of the brush's character) unless the preset sets its own
+      const v = r[k]; const nv = o[k];
+      if (v && v._obj === '$brVr' && nv && nv.jitter && !(v.jitter && v.jitter._value)) r[k] = Object.assign({}, v, { jitter: nv.jitter });
+    });
     await ps_.toolOpts(r, 'Feel: ' + f[1]).catch((e) => log('feel', e));
   }
   if (lastBrushKey) { const m = store.get('feel', {}); m[lastBrushKey] = id; store.set('feel', m); }
