@@ -29,7 +29,11 @@ async function modal(name, fn) {
   return core.executeAsModal(fn, { commandName: name });
 }
 async function play(descs, name = 'InkStudio') {
-  return modal(name, () => action.batchPlay(descs, {}));
+  // batchPlay reports failures as {_obj:'error'} results instead of throwing
+  const r = await modal(name, () => action.batchPlay(descs, {}));
+  const bad = (r || []).find((x) => x && x._obj === 'error');
+  if (bad) throw new Error(bad.message || ('Photoshop error ' + bad.result));
+  return r;
 }
 const ps_ = {
   async tool(t) { await play([{ _obj: 'select', _target: [{ _ref: t }] }], 'Tool'); },
@@ -290,7 +294,7 @@ function packBody(p) {
         const line = el('div', 'sline'); line.appendChild(el('div', 'name', b)); line.appendChild(star(key(p, f, b)));
         row.appendChild(line);
         row.title = b;
-        row.onclick = () => useBrush(p, f, b, row);
+        row.onclick = () => useBrush(p, f, b, row).catch(() => {});
         list.appendChild(row);
       });
       body.appendChild(list);
@@ -306,7 +310,7 @@ function packBody(p) {
       cell.appendChild(el('div', 'name', b));
       cell.appendChild(star(key(p, f, b)));
       cell.title = b;
-      cell.onclick = () => useBrush(p, f, b, cell);
+      cell.onclick = () => useBrush(p, f, b, cell).catch(() => {});
       grid.appendChild(cell);
     });
     body.appendChild(grid);
@@ -348,7 +352,7 @@ async function useBrush(p, f, b, cell) {
     status(b + ' · ' + px + ' px');
     recent = [{ pack: p.id, file: f.file, brush: b }, ...recent.filter((r) => !(r.pack === p.id && r.brush === b))].slice(0, 40);
     store.set('recent', recent);
-  } catch (e) { status('Could not select: ' + (e.message || e)); }
+  } catch (e) { status('Could not select: ' + (e.message || e)); log('useBrush', b, e); throw e; }
 }
 function setTab() { document.querySelectorAll('#tabs .b').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab)); }
 
@@ -497,7 +501,7 @@ async function devHook() {
     try {
       if (c.op === 'select') {
         const p = LIB.packs.find((x) => x.id === c.pack); const fl = p.files[c.file || 0];
-        await useBrush(p, fl, c.brush || fl.brushes[0], null);
+        await useBrush(p, fl, c.brush || fl.brushes[0], null).catch((e) => { out = 'ERR ' + (e.message || e); });
       } else if (c.op === 'fx') { await setFx(c.fx); }
       else if (c.op === 'opts') { const o = await nativeOptions(); out = JSON.stringify((c.keys || Object.keys(o)).reduce((a, k) => (a[k] = o[k], a), {})); }
       else if (c.op === 'tool') { document.querySelector(`.tool[data-tool="${c.tool}"]`).onclick(); }
